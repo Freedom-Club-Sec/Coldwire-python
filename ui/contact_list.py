@@ -97,6 +97,7 @@ class ContactListWindow(tk.Tk):
         # We let the threads do the cleanup for themselves, we already set their flag so they should know its time to exit
         self.smp_thread.join()
         self.pfs_thread.join()
+        self.messages_thread.join()
 
     def poll_ui_queue(self):
         try:
