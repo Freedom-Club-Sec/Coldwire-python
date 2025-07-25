@@ -70,7 +70,6 @@ class PasswordPrompt(tk.Toplevel):
         enhanced_entry(self.entry)
 
         self.grab_set()
-        self.transient(master)
 
     def toggle_visibility(self):
         self.entry.config(show="" if self.toggle_var.get() else "*")

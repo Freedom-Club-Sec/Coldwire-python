@@ -24,12 +24,12 @@ def load_account_data(password = None) -> dict:
             blob = f.read()
 
             # first 12 bytes is nonce, and last 32 bytes is the password salt, 
-            # and before salt 16 bytes is tag, and the ciphertext is inbetween.
+            # and the ciphertext is inbetween.
             password_kdf, _ = crypto.derive_key_argon2id(password.encode(), salt=blob[-32:])
             
             blob = blob[:-32]
 
-            user_data = json.loads(crypto.decrypt_aes_gcm(password_kdf, blob[:12], blob[12:-16], blob[-16:]))
+            user_data = json.loads(crypto.decrypt_aes_gcm(password_kdf, blob[:12], blob[12:]))
 
 
 
@@ -145,9 +145,9 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
         password_kdf, password_salt = crypto.derive_key_argon2id(password.encode())
 
 
-        nonce, ciphertext, tag = crypto.encrypt_aes_gcm(password_kdf, json.dumps(user_data).encode("utf-8"))
+        nonce, ciphertext = crypto.encrypt_aes_gcm(password_kdf, json.dumps(user_data).encode("utf-8"))
         with open(ACCOUNT_FILE_PATH, "wb") as f:
-            f.write(nonce + ciphertext + tag + password_salt)
+            f.write(nonce + ciphertext + password_salt)
 
 
     logger.debug("Saved user_data to file (%s)", ACCOUNT_FILE_PATH)
