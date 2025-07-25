@@ -221,6 +221,7 @@ class ContactListWindow(tk.Tk):
         )
         btn.pack(fill="x", padx=15, pady=5)
 
+    
     def copy_to_clipboard(self, text):
         self.clipboard_clear()
         self.clipboard_append(text)
