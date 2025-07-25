@@ -1,4 +1,7 @@
 import oqs
+import secrets
+
+OTP_PADDING_LENGTH = 2
 
 def create_signature(algorithm: str, message: bytes, private_key: bytes) -> bytes:
     with oqs.Signature(algorithm, secret_key=private_key) as signer:
@@ -15,20 +18,91 @@ def generate_sign_keys(algorithm: str = "Dilithium5"):
         return private_key, public_key
 
 
-
-def one_time_pad(plain_text: bytes, key: bytes) -> bytes:
+def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -> bytes:
     """
-        Does one-time-pad XOR encryption on plain_text with key and returns result
+        Encrypts a plaintext with a one-time pad with padding.
+
+        - Always prefixes the plaintext with a OTP_PADDING_LENGTH big-endian length.
+        - Pads with random bytes up to padding_limit, if padding_limit is 0
+        - Then no padding is added
+
+        Args:
+            plaintext: The plaintext message to encrypt.
+            key: The one-time pad. Must be at least as long as the plaintext block.
+            padding_limit: The padding limit
+
+        Returns:
+            Ciphertext as bytes.
+
+    """
+
+    # Here we make an assumption that the padding_limit will never exceed 65535 bytes
+    if padding_limit > 65535:
+        raise ValueError("Padding too large")
+
+    # NOTE: If padding_limit is 0, the plaintext_paddding_bytes would also be 0
+    # Which means an attacker could potentially learn some info the first 2 bytes
+    # which consists of the padding_length. This is fine as OTP security guarantees
+    # as long as the rest of key is random and never reused, the security 
+    # wouldn't be affected at all.
+    #
+    # However, this could aid the adversary to confidently recover message length 
+    # as he now knows that the padding is 0 and hence could calculate the length 
+    # of the plaintext.
+    # This can be prevented if padding_limit is randomized even just slightly
+    # We leave that responsibility to the caller
+
+    plaintext_padding = secrets.token_bytes(padding_limit)
+    padding_length_bytes = len(plaintext_padding).to_bytes(OTP_PADDING_LENGTH, "big")
+
+    padded_plaintext = padding_length_bytes + plaintext + plaintext_padding
+
+    return one_time_pad(padded_plaintext, key)
+
+
+
+def otp_decrypt_with_padding(ciphertext: bytes, key: bytes) -> bytes:
+    """
+        Decrypts a one-time-pad ciphertext that has been padded
+
+        Args:
+            ciphertext: The padded ciphertext message to decrypt.
+            key: The one-time pad. Must be at least as long as the ciphertext block.
+
+        Returns:
+            Plaintext as bytes.
+
+    """
+
+    plaintext_with_padding = one_time_pad(ciphertext, key)
+
+    # Extract the plaintext length
+    padding_length = int.from_bytes(plaintext_with_padding[:OTP_PADDING_LENGTH], "big") 
+    
+    # Return the plaintext without the padding nor padding length
+    if padding_length != 0:
+        return plaintext_with_padding[OTP_PADDING_LENGTH : -padding_length]
+
+    # Return the plaintext without padding_length. Needed because 
+    # if padding_length is 0, -padding_length would return an empty string
+
+    return plaintext_with_padding[OTP_PADDING_LENGTH:]
+
+
+
+def one_time_pad(plaintext: bytes, key: bytes) -> bytes:
+    """
+        Does one-time-pad XOR encryption on plaintext with key and returns result
 
         OTP is the only known encryption system that is mathematically proven to be unbreakable under the principles of information theory
-        if the key is random and never reused
+        if the key is random and is never reused
     """
-    otpd_plain_text = b''
-    for index, plain_byte in enumerate(plain_text):
+    otpd_plaintext = b''
+    for index, plain_byte in enumerate(plaintext):
         key_byte = key[index]
-        otpd_plain_text += bytes([plain_byte ^ key_byte])
+        otpd_plaintext += bytes([plain_byte ^ key_byte])
 
-    return otpd_plain_text
+    return otpd_plaintext
 
 
 
@@ -96,4 +170,10 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = 10240, 
 
     return ciphertexts_blob, shared_secrets[:otp_pad_size]
 
+
+def randomize_replay_protection_number(replay_protection_number: int) -> int:
+    return random_number_range(replay_protection_number, random_number_range(replay_protection_number + 1, replay_protection_number + random_number_range(100, 1000)))
+
+def random_number_range(a: int, b: int) -> int:
+    return secrets.randbelow(b - a + 1) + a
 

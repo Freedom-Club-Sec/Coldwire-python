@@ -14,6 +14,7 @@ from logic.storage import save_account_data
 from logic.contacts import save_contact
 from logic.get_user import get_target_lt_public_key
 from logic.pfs import send_new_ephemeral_keys
+from core.crypto import random_number_range
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 import hashlib
@@ -325,7 +326,8 @@ def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
         auth_token = user_data_copied["token"]
     
         try:
-            response = http_request(f"{server_url}/get_smp/longpoll", "GET", auth_token=auth_token, longpoll=30)
+            # Random longpoll number to help obfsucate traffic against analysis
+            response = http_request(f"{server_url}/get_smp/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(1, 30))
         except TimeoutError:
             continue
 

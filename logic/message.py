@@ -19,9 +19,13 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, contact_k
     ciphertext_blob, pads = generate_kyber_shared_secrets(contact_kyber_key)
 
     if not replay_protection_number:
-        replay_protection_number = 1
+        # 1 because at this point, replay_protection_number is None.
+        replay_protection_number = randomize_replay_protection_number(1)
     else:
+
+        # This +1 is needed to ensure it at least increments by 1
         replay_protection_number += 1
+        replay_protection_number = randomize_replay_protection_number(replay_protection_number)
 
     json_inner_payload = json.dumps({
             "ciphertext_blob": b64encode(ciphertext_blob).decode(),
@@ -101,27 +105,50 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     message_encoded = message.encode("utf-8")
 
-    if len(message_encoded) > len(our_pads):
-        ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded)}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
+    # 256 is the maxmium padding limit
+    message_otp_padding_length = max(0, 256 - OTP_PADDING_LENGTH - len(message_encoded))
+
+    if (len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length) > len(our_pads):
+        # TODO: Generate pads and send to contact
+        ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
         return False
 
-    message_otp_pad = our_pads[:len(message_encoded)]
+    message_otp_pad = our_pads[:len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length]
+
+    # We one-time-pad encrypt the message with padding
+    #
+    # NOTE: The padding only protects short-messages which are easy to infer what is said based purely on message length 
+    # With messages larger than padding_limit, we assume the message entropy give enough security to make an adversary assumption
+    # of message context (almost) useless. 
+    #
+    message_encrypted = otp_encrypt_with_padding(message_encoded, message_otp_pad, padding_limit = message_otp_padding_length)
+    message_encrypted = b64encode(message_encrypted).decode()
 
     # Unlike in other functions, we truncate pads here and update replay_protection_number regardless of request being successful or not
-    # because a malicious server can make our requests fail to force us to re-use the same pad for our next message 
+    # because a malicious server could make our requests fail to force us to re-use the same pad for our next message 
     # which would break all of our security
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_pads"]["pads"] = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encoded):]
-        user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] + 1
+        user_data["contacts"][contact_id]["our_pads"]["pads"] = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length:]
 
-        replay_protection_number = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
+        replay_protection_number  = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
+
+        # This ensures the replay counter always gets incremented by at very least 1
+        replay_protection_number += 1
+
+        # This helps obfsucate how many total messages were sent incase the request is intercepted
+        # Adversaries might be able to come with a modest guess of how many total messages were sent
+        # but never actually the exact amount, this provides some form of plausible deniability.
+        replay_protection_number = randomize_replay_protection_number(replay_protection_number)
+
+        user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] = replay_protection_number
+
+
 
     save_account_data(user_data, user_data_lock)
-    
-    message_encrypted = one_time_pad(message_encoded, message_otp_pad)
+   
 
     json_inner_payload = json.dumps({
-            "message_encrypted": b64encode(message_encrypted).decode(),
+            "message_encrypted": message_encrypted,
             "replay_protection_number": replay_protection_number
         })
 
@@ -141,8 +168,8 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
    
 
     logger.info("Successfuly sent the message to contact (%s)", contact_id)
-    print("HMMMMMM", len(message), len(our_pads), len(message_otp_pad))
-    print("Ayye, MESSAGE: ", message_encrypted)
+
+    print(len(message_encrypted), len(our_pads))
 
     return True
 
@@ -159,7 +186,8 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
 
         try:
-            response = http_request(f"{server_url}/messages/longpoll", "GET", auth_token=auth_token, longpoll=30)
+            # Random longpoll number to help obfsucate traffic against analysis
+            response = http_request(f"{server_url}/messages/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(1, 30))
         except TimeoutError:
             continue
 
@@ -236,7 +264,6 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
                     contact_replay_protection_number = user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"]
                
 
-                # print(len(message_encrypted), len(contact_pads))
                 if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
                     logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
                     continue
@@ -246,7 +273,7 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
                     continue
 
 
-                message_decrypted = one_time_pad(message_encrypted, contact_pads[:len(message_encrypted)])
+                message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
                
                 # immediately truncate the pads
                 contact_pads = contact_pads[len(message_encrypted):] 
@@ -263,13 +290,13 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
                 try:
                     message_decoded = message_decrypted.decode("utf-8")
                 except:
-                    log.info("Failed to decode UTF-8 message, we will not be showing this message.")
+                    logger.error("Failed to decode UTF-8 message, we will not be showing this message.")
                     continue
 
                 ui_queue.put({
                     "type": "new_message",
                     "contact_id": contact_id,
-                    "message": message_decrypted.decode("utf-8")
+                    "message": message_decoded
                 })
                 
             

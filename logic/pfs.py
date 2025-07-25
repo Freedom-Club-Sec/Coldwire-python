@@ -1,7 +1,7 @@
 from core.requests import http_request
 from logic.storage import save_account_data
 from logic.get_user import get_target_lt_public_key
-from core.crypto import generate_kem_keys, verify_signature, create_signature, generate_sign_keys
+from core.crypto import generate_kem_keys, verify_signature, create_signature, generate_sign_keys, random_number_range
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 import hashlib
@@ -89,7 +89,8 @@ def perfect_forward_secrecy_worker(user_data, user_data_lock, ui_queue, stop_fla
 
 
         try:
-            response = http_request(f"{server_url}/pfs/longpoll", "GET", auth_token=auth_token, longpoll=30)
+            # Random longpoll number to help obfsucate traffic against analysis
+            response = http_request(f"{server_url}/pfs/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(1, 30))
         except TimeoutError:
             continue
 
