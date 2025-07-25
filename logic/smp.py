@@ -104,7 +104,9 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer) ->
 
         }, auth_token=auth_token)
     except:
-        raise ValueError("Could not connect to server")
+        logger.error("Failed to send proof request to server, either you are offline or the server is down")
+        smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
+        return
 
    
     # We only update after the request is sent successfully
@@ -152,17 +154,18 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     # Compute the proof
     our_message = our_nonce + contact_nonce + our_key_fingerprint
-    our_message = hmac.new(answer_secret, our_message, hashlib.sha3_512).hexdigest()
+    our_message = hmac.new(answer_secret, our_message, hashlib.sha3_512).digest()
 
-    logger.debug("Message to us: %s", message["proof"])
+    logger.debug("Message Proof sent to us: %s", message["proof"])
     logger.debug("Our compute message: %s", our_message)
 
+    contact_proof_raw = bytes.fromhex(message["proof"])
+
     # Verify Contact's version of our public-key fingerprint matches our actual public-key fingerprint
-    if our_message != message["proof"]:
-        logger.debug("Verification failed")
-
+    # We compare using compare_digest to prevent timing analysis by avoiding content-based short circuiting behaviour
+    if not hmac.compare_digest(our_message, contact_proof_raw):
+        logger.warning("Verification failed")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
-
         return
 
 
@@ -180,9 +183,9 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
             "recipient": contact_id
         }, auth_token=auth_token)
     except:
+        logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
-        # raise ValueError("Could not connect to server")
    
     # We call smp_success at very end to ensure if the requests step fail, we don't alter our local state
     smp_success(user_data, user_data_lock, contact_id, ui_queue)
@@ -209,20 +212,22 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     # Compute the proof
     our_message = our_nonce + contact_nonce + our_key_fingerprint
-    our_message = hmac.new(answer_secret, our_message, hashlib.sha3_512).hexdigest()
+    our_message = hmac.new(answer_secret, our_message, hashlib.sha3_512).digest()
 
     logger.debug("Message to us: %s", message["proof"])
     logger.debug("Our compute message: %s", our_message)
 
-    # Verify Contact's version of our public-key fingerprint matches our actual public-key fingerprint
-    if our_message != message["proof"]:
-        logger.debug("Verification failed")
 
+    contact_proof_raw = bytes.fromhex(message["proof"])
+
+    # Verify Contact's version of our public-key fingerprint matches our actual public-key fingerprint
+    # We compare using compare_digest to prevent timing analysis by avoiding content-based short circuiting behaviour
+    if not hmac.compare_digest(our_message, contact_proof_raw):
+        logger.warning("Verification failed")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
 
 
-    # We call smp_success at very end to ensure if the requests step fail, we don't alter our local state
     smp_success(user_data, user_data_lock, contact_id, ui_queue)
 
     with user_data_lock:
@@ -231,6 +236,10 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     # Attempt to automatically exchanger per-contact and ephemeral keys
     # We only attempt here and not inside of smp_success because we don't want both contact's attempting to exchange keys at the same time
+    #
+    # NOTE: Maybe we need a delay here to ensure if a failure occured in contact's step 3, we catch it and mark 
+    # the contact as unverified despite verifiying him ?
+    #
     send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 
 
@@ -327,7 +336,7 @@ def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
     
         try:
             # Random longpoll number to help obfsucate traffic against analysis
-            response = http_request(f"{server_url}/get_smp/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(1, 30))
+            response = http_request(f"{server_url}/get_smp/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(5, 30))
         except TimeoutError:
             continue
 
@@ -348,7 +357,7 @@ def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
             if (not (contact_id in user_data_copied["contacts"])):
                 # We assume it has to be step 1 because the contact did not exist before
                 if message.get("step") != 1:
-                    logger.debug("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
+                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
                     continue
 
                 logger.info("We received a new SMP request for a contact we didnt see before")
@@ -385,7 +394,7 @@ def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
                 
             elif message["step"] == 2:
                 if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 1):
-                    logger.debug("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
+                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
                     continue
 
                 # Perform the next SMP step
@@ -395,7 +404,7 @@ def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
             elif message["step"] == 3:
                 if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 2):
-                    logger.debug("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
+                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
                     continue
 
                 # Perform the next SMP step

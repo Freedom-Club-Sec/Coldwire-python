@@ -187,7 +187,7 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
         try:
             # Random longpoll number to help obfsucate traffic against analysis
-            response = http_request(f"{server_url}/messages/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(1, 30))
+            response = http_request(f"{server_url}/messages/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(5, 30))
         except TimeoutError:
             continue
 
