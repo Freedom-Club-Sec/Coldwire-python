@@ -56,7 +56,7 @@ class AddContactPrompt(tk.Toplevel):
             save_account_data(self.master.user_data, self.master.user_data_lock)
         except ValueError as e:
             self.status.config(text=e, fg="red")
-            logging.error("Error occured while adding new contact (%s): %s ", contact_id, e)
+            logger.error("Error occured while adding new contact (%s): %s ", contact_id, e)
             return
             
 
