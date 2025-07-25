@@ -109,7 +109,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
     message_otp_padding_length = max(0, 256 - OTP_PADDING_LENGTH - len(message_encoded))
 
     if (len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length) > len(our_pads):
-        # TODO: Generate pads and send to contact
         ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
         return False
 
