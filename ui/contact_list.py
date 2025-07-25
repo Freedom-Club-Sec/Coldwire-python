@@ -112,10 +112,14 @@ class ContactListWindow(tk.Tk):
                         self.chat_windows_store_tmp[msg["contact_id"]].lift()
                         self.chat_windows_store_tmp[msg["contact_id"]].focus_force()
                     else:
-                        logger.info("Opening chat window for contact (%s) because a new message arrived", msg["contact_id"])
-                        self.chat_windows_store_tmp[msg["contact_id"]] = ChatWindow(self, msg["contact_id"])
+                        logger.debug("Opening chat window for contact (%s) because a new message arrived", msg["contact_id"])
+                        self.chat_windows_store_tmp[msg["contact_id"]] = ChatWindow(self, msg["contact_id"], self.ui_queue)
 
                     self.chat_windows_store_tmp[msg["contact_id"]].append_message("Contact: " + msg["message"])
+            
+                elif msg["type"] == "chat_closed":
+                    del self.chat_windows_store_tmp[msg["contact_id"]]
+                    logger.debug("Chat window for contact (%s) has been closed and therefore deleted", msg["contact_id"])
 
                 elif msg["type"] == "smp_question":
                     SMPQuestionWindow(self, msg["contact_id"], msg["question"])
@@ -235,7 +239,7 @@ class ContactListWindow(tk.Tk):
             else:
                 logger.info("Opening chat window for contact (%s)", contact_id)
 
-                self.chat_windows_store_tmp[contact_id] = ChatWindow(self, contact_id)
+                self.chat_windows_store_tmp[contact_id] = ChatWindow(self, contact_id, self.ui_queue)
 
             return
 

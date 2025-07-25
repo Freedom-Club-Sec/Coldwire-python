@@ -201,24 +201,24 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
             contact_id = message["sender"]
 
             if (not (contact_id in user_data_copied["contacts"])):
-                logger.debug("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
+                logger.warning("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
                 logger.debug("Our contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
                 continue
 
 
             if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-                logger.debug("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
+                logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
                 continue
 
 
             contact_d5_public_key = user_data_copied["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]
 
             if not contact_d5_public_key:
-                logger.debug("Contact per-contact Dilithium5 public key is missing.. skipping message")
+                logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
                 continue
 
 
-            logger.info("Received a new message of type: %s", message["type"])
+            logger.debug("Received a new message of type: %s", message["type"])
 
             if message["type"] == "new_otp_batch":
                 payload_signature  = b64decode(message["payload_signature"], validate=True)

@@ -3,7 +3,7 @@ from tkinter import messagebox
 from logic.message import send_message_processor
 
 class ChatWindow(tk.Toplevel):
-    def __init__(self, master, contact_id):
+    def __init__(self, master, contact_id, ui_queue):
         super().__init__(master)
         self.title(f"Chat – {contact_id}")
         self.geometry("700x500")
@@ -24,6 +24,9 @@ class ChatWindow(tk.Toplevel):
         self.entry.bind("<Shift-Return>", self.newline)
 
         self.contact_id = contact_id
+        self.ui_queue = ui_queue
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         
         if self.contact_id in self.master.messages_store_tmp:
@@ -33,6 +36,13 @@ class ChatWindow(tk.Toplevel):
             self.master.messages_store_tmp[self.contact_id] = [] 
 
             self.append_message(f"* Chat initialized with {contact_id}")
+
+    def on_close(self):
+        self.ui_queue.put({
+            "type": "chat_closed",
+            "contact_id": self.contact_id
+        })
+        self.destroy()
 
     def on_send(self, event=None):
         message = self.entry.get("1.0", "end-1c").strip()
