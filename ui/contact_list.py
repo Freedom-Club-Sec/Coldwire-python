@@ -11,6 +11,7 @@ from logic.storage import check_account_file, load_account_data
 from logic.smp import smp_verification_worker
 from logic.pfs import perfect_forward_secrecy_worker
 from logic.message import messages_worker
+from logic.utils import thread_failsafe_wrapper
 import tkinter as tk
 import sys
 import os
@@ -66,27 +67,22 @@ class ContactListWindow(tk.Tk):
         self.chat_windows_store_tmp = {}
 
         self.show_contacts()
-
     def init_hooks_and_background_workers(self):
-        self.smp_stop_flag      = threading.Event()
-        self.pfs_stop_flag      = threading.Event()
-        self.messages_stop_flag = threading.Event()
+        self.workers_stop_flag = threading.Event()
 
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
         atexit.register(self.on_exit)
 
-        self.smp_thread = threading.Thread(target=smp_verification_worker, args=(self.user_data, self.user_data_lock, self.ui_queue, self.smp_stop_flag))
-        self.pfs_thread = threading.Thread(target=perfect_forward_secrecy_worker, args=(self.user_data, self.user_data_lock, self.ui_queue, self.pfs_stop_flag))
-        self.messages_thread = threading.Thread(target=messages_worker, args=(self.user_data, self.user_data_lock, self.ui_queue, self.messages_stop_flag))
+        self.smp_thread      = threading.Thread(target=thread_failsafe_wrapper, args=(smp_verification_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
+        self.pfs_thread      = threading.Thread(target=thread_failsafe_wrapper, args=(perfect_forward_secrecy_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
+        self.messages_thread = threading.Thread(target=thread_failsafe_wrapper, args=(messages_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
 
         self.smp_thread.start()
         self.pfs_thread.start()
         self.messages_thread.start()
 
     def on_exit(self):
-        self.smp_stop_flag.set()
-        self.pfs_stop_flag.set()
-        self.messages_stop_flag.set()
+        self.workers_stop_flag.set()
 
         # Incase the GUI was already destroyed 
         try:
@@ -133,6 +129,10 @@ class ContactListWindow(tk.Tk):
 
                 elif msg["type"] == "showerror":
                     messagebox.showerror(msg["title"], msg["message"])
+                
+                elif msg["type"] == "exit":
+                    logger.warning("Received exit signal, probably a thread crashed")
+                    self.quit() 
                 
 
         except queue.Empty:

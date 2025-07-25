@@ -168,8 +168,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     logger.info("Successfuly sent the message to contact (%s)", contact_id)
 
-    print(len(message_encrypted), len(our_pads))
-
     return True
 
 

@@ -4,6 +4,9 @@ from logic.get_user import get_target_lt_public_key
 from logic.contacts import save_contact
 from logic.storage import save_account_data
 import tkinter as tk
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AddContactPrompt(tk.Toplevel):
     def __init__(self, master):
@@ -53,7 +56,7 @@ class AddContactPrompt(tk.Toplevel):
             save_account_data(self.master.user_data, self.master.user_data_lock)
         except ValueError as e:
             self.status.config(text=e, fg="red")
-            print(e)
+            logging.error("Error occured while adding new contact (%s): %s ", contact_id, e)
             return
             
 
