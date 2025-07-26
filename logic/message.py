@@ -200,19 +200,19 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
     if (not (contact_id in user_data_copied["contacts"])):
         logger.warning("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
         logger.debug("Our contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
-        continue
+        return
 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
         logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
-        continue
+        return
 
 
     contact_d5_public_key = user_data_copied["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]
 
     if not contact_d5_public_key:
         logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
-        continue
+        return
 
 
     logger.debug("Received a new message of type: %s", message["type"])
@@ -222,7 +222,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
         valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
         if not valid_signature:
             logger.debug("Invalid OTP batch signature.. possible MiTM ?")
-            continue
+            return
 
         json_payload = json.loads(message["json_payload"])
 
@@ -235,7 +235,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
             contact_pads = decrypt_kyber_shared_secrets(ciphertext_blob, our_kyber_key)
         except:
             logger.debug("Failed to decrypt shared_secrets, possible MiTM?")
-            continue
+            return
 
         with user_data_lock:
             user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
@@ -250,7 +250,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
         valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
         if not valid_signature:
             logger.debug("Invalid new message signature.. possible MiTM ?")
-            continue
+            return
 
         json_payload             = json.loads(message["json_payload"])
         message_encrypted        = b64decode(json_payload["message_encrypted"], validate=True)
@@ -263,11 +263,11 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
 
         if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
             logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
-            continue
+            return
 
         if (not contact_replay_protection_number) or (replay_protection_number <= contact_replay_protection_number):
             logger.warning("Message replay_protection_number is equal or smaller than our saved replay_protection_number, this could be a possible replay attack, skipping this message...")
-            continue
+            return
 
 
         message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
@@ -288,7 +288,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
             message_decoded = message_decrypted.decode("utf-8")
         except:
             logger.error("Failed to decode UTF-8 message, we will not be showing this message.")
-            continue
+            return
 
         ui_queue.put({
             "type": "new_message",
