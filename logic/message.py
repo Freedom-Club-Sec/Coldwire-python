@@ -1,6 +1,6 @@
 from core.requests import http_request
 from logic.storage import save_account_data
-from logic.pfs import send_new_ephemeral_keys
+from logic.pfs import send_new_ephemeral_keys, rotate_ephemeral_keys
 from core.crypto import *
 from base64 import b64decode, b64encode
 import copy
@@ -97,7 +97,28 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
         if not generate_and_send_pads(user_data, user_data_lock, contact_id, contact_kyber_public_key, our_d5_private_key, ui_queue):
             return False
+        
+       
+        with user_data_lock:
+            # Increment the rotation_counter
+            user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] += 1
 
+            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"]
+            rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
+
+        
+        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
+
+        # See if we should rotate our keys
+        if rotation_counter == rotate_at:
+            logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
+            ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
+            rotate_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
+
+            save_account_data(user_data, user_data_lock)
+            return False
+        
+        
 
     with user_data_lock:
         our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
@@ -105,8 +126,8 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     message_encoded = message.encode("utf-8")
 
-    # 256 is the maxmium padding limit
-    message_otp_padding_length = max(0, 256 - OTP_PADDING_LENGTH - len(message_encoded))
+    # 1024 is the maxmium padding limit
+    message_otp_padding_length = max(0, 1024 - OTP_PADDING_LENGTH - len(message_encoded))
 
     if (len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length) > len(our_pads):
         ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
@@ -114,6 +135,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     message_otp_pad = our_pads[:len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length]
 
+    logger.debug("Our pad size is %d and new size after the message is %d", len(our_pads), len(our_pads) - len(message_otp_pad))
     # We one-time-pad encrypt the message with padding
     #
     # NOTE: The padding only protects short-messages which are easy to infer what is said based purely on message length 
@@ -141,7 +163,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
         user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] = replay_protection_number
 
-
+        
 
     save_account_data(user_data, user_data_lock)
    

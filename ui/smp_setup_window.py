@@ -89,7 +89,7 @@ class SMPSetupWindow(tk.Toplevel):
             messagebox.showerror("Error", "Answer must be at least 4 characters long!")
             return
 
-        if len(answer) < 6:
+        if len(answer) <= 5:
             # Even though we enforce SMP, sometime a user might want to add someone whom our user don't have a out-of-band channel to communicate with
             # allowing the user to set a low-entropy answer gives user the opportunity to do so
             # But we still warn the user twice about the importance of the answer's entropy in context of SMP verification
