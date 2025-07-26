@@ -149,7 +149,7 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = 10240, 
 
 
         Default desired One-time-pad size is set to 10 kilobytes which is meant to accommodate-
-        10 messages, assuming every message is 1024 bytes.
+        10 messages, assuming every message is 1024 bytes with the padding applies.
 
 
         We concatenate the ciphertexts together safely because Kyper1024 has a defined fixed-size ciphertext-
