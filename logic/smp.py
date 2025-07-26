@@ -391,5 +391,3 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
 
 
 
-
-    ""

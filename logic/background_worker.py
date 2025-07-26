@@ -56,7 +56,7 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                 pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message)
 
             elif message["data_type"] == "message":
-                pass
+                messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message)
 
             else:
                 logger.error(

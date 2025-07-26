@@ -194,128 +194,104 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
 
+def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message):
+    contact_id = message["sender"]
 
-def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
-    while not stop_flag.is_set():
-        with user_data_lock:
-            user_data_copied = copy.deepcopy(user_data)
-
-        server_url = user_data_copied["server_url"]
-        auth_token = user_data_copied["token"]
+    if (not (contact_id in user_data_copied["contacts"])):
+        logger.warning("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
+        logger.debug("Our contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
+        continue
 
 
-        try:
-            # Random longpoll number to help obfsucate traffic against analysis
-            response = http_request(f"{server_url}/messages/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(5, 30))
-        except TimeoutError:
+    if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
+        logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
+        continue
+
+
+    contact_d5_public_key = user_data_copied["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]
+
+    if not contact_d5_public_key:
+        logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
+        continue
+
+
+    logger.debug("Received a new message of type: %s", message["type"])
+
+    if message["msg_type"] == "new_otp_batch":
+        payload_signature  = b64decode(message["payload_signature"], validate=True)
+        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
+        if not valid_signature:
+            logger.debug("Invalid OTP batch signature.. possible MiTM ?")
             continue
 
-        logger.debug("Messages poll: %s", json.dumps(response, indent=2))
+        json_payload = json.loads(message["json_payload"])
 
-        for message in response["messages"]:
-            with user_data_lock:
-                user_data_copied = copy.deepcopy(user_data)
+        ciphertext_blob          = b64decode(json_payload["ciphertext_blob"], validate=True)
+        replay_protection_number = int(json_payload["replay_protection_number"])
 
+        our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"]
 
-            contact_id = message["sender"]
+        try:
+            contact_pads = decrypt_kyber_shared_secrets(ciphertext_blob, our_kyber_key)
+        except:
+            logger.debug("Failed to decrypt shared_secrets, possible MiTM?")
+            continue
 
-            if (not (contact_id in user_data_copied["contacts"])):
-                logger.warning("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
-                logger.debug("Our contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
-                continue
+        with user_data_lock:
+            user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
+            user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
 
+        logger.info("Saved contact (%s) new batch of One-Time-Pads", contact_id)
 
-            if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-                logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
-                continue
+        save_account_data(user_data, user_data_lock)
 
+    elif message["msg_type"] == "new_message":
+        payload_signature  = b64decode(message["payload_signature"], validate=True)
+        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
+        if not valid_signature:
+            logger.debug("Invalid new message signature.. possible MiTM ?")
+            continue
 
-            contact_d5_public_key = user_data_copied["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]
+        json_payload             = json.loads(message["json_payload"])
+        message_encrypted        = b64decode(json_payload["message_encrypted"], validate=True)
+        replay_protection_number = int(json_payload["replay_protection_number"])
 
-            if not contact_d5_public_key:
-                logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
-                continue
+        with user_data_lock:
+            contact_pads                     = user_data["contacts"][contact_id]["contact_pads"]["pads"]
+            contact_replay_protection_number = user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"]
+       
 
+        if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
+            logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
+            continue
 
-            logger.debug("Received a new message of type: %s", message["type"])
-
-            if message["msg_type"] == "new_otp_batch":
-                payload_signature  = b64decode(message["payload_signature"], validate=True)
-                valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
-                if not valid_signature:
-                    logger.debug("Invalid OTP batch signature.. possible MiTM ?")
-                    continue
-
-                json_payload = json.loads(message["json_payload"])
-
-                ciphertext_blob          = b64decode(json_payload["ciphertext_blob"], validate=True)
-                replay_protection_number = int(json_payload["replay_protection_number"])
-
-                our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"]
-
-                try:
-                    contact_pads = decrypt_kyber_shared_secrets(ciphertext_blob, our_kyber_key)
-                except:
-                    logger.debug("Failed to decrypt shared_secrets, possible MiTM?")
-                    continue
-
-                with user_data_lock:
-                    user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
-                    user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
-
-                logger.info("Saved contact (%s) new batch of One-Time-Pads", contact_id)
-
-                save_account_data(user_data, user_data_lock)
-
-            elif message["msg_type"] == "new_message":
-                payload_signature  = b64decode(message["payload_signature"], validate=True)
-                valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
-                if not valid_signature:
-                    logger.debug("Invalid new message signature.. possible MiTM ?")
-                    continue
-
-                json_payload             = json.loads(message["json_payload"])
-                message_encrypted        = b64decode(json_payload["message_encrypted"], validate=True)
-                replay_protection_number = int(json_payload["replay_protection_number"])
-
-                with user_data_lock:
-                    contact_pads                     = user_data["contacts"][contact_id]["contact_pads"]["pads"]
-                    contact_replay_protection_number = user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"]
-               
-
-                if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
-                    logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
-                    continue
-
-                if (not contact_replay_protection_number) or (replay_protection_number <= contact_replay_protection_number):
-                    logger.warning("Message replay_protection_number is equal or smaller than our saved replay_protection_number, this could be a possible replay attack, skipping this message...")
-                    continue
+        if (not contact_replay_protection_number) or (replay_protection_number <= contact_replay_protection_number):
+            logger.warning("Message replay_protection_number is equal or smaller than our saved replay_protection_number, this could be a possible replay attack, skipping this message...")
+            continue
 
 
-                message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
-               
-                # immediately truncate the pads
-                contact_pads = contact_pads[len(message_encrypted):] 
+        message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
+       
+        # immediately truncate the pads
+        contact_pads = contact_pads[len(message_encrypted):] 
 
-                # and immediately save the new pads and replay protection number
-                with user_data_lock:
-                    user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
-                    user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
+        # and immediately save the new pads and replay protection number
+        with user_data_lock:
+            user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
+            user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
 
-                save_account_data(user_data, user_data_lock)
+        save_account_data(user_data, user_data_lock)
 
-                logger.info("Truncated pads and updated replay_protect_number for contact (%s)", contact_id)
+        logger.info("Truncated pads and updated replay_protect_number for contact (%s)", contact_id)
 
-                try:
-                    message_decoded = message_decrypted.decode("utf-8")
-                except:
-                    logger.error("Failed to decode UTF-8 message, we will not be showing this message.")
-                    continue
+        try:
+            message_decoded = message_decrypted.decode("utf-8")
+        except:
+            logger.error("Failed to decode UTF-8 message, we will not be showing this message.")
+            continue
 
-                ui_queue.put({
-                    "type": "new_message",
-                    "contact_id": contact_id,
-                    "message": message_decoded
-                })
-                
-            
+        ui_queue.put({
+            "type": "new_message",
+            "contact_id": contact_id,
+            "message": message_decoded
+        })
