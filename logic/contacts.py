@@ -28,7 +28,9 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str, contact_publi
                         "private_key": None,
                         },
                     "rotation_counter": None,
-                    "rotate_at": None
+                    "rotate_at": None,
+                    "our_hash_chain": None,
+                    "contact_hash_chain": None
 
                 },
                 "message_sign_keys": {

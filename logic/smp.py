@@ -4,9 +4,30 @@
 
     Guranteed verification certainity IF the answer has enough entropy (for the duration of the process.)
 
+    This is not **strictly** a SMP implementation, but it is a simplified, human-language variant
+    we made for verifying a contact's long-term public-key.
 
-    This code could've been cleaner, but we choose to still define a function and re-use some code for each step -
-    to ensure ourselves that we did not make an implementation mistake.
+    Our implementation is inspired by Off-The-Record Messaging's SMP implementation.
+
+
+    Query server for new SMP verification messages
+    Check which step we are on
+    Act accordingly
+
+    Step 1 is initiated by the contact, whom sets a question and an answer, then sends the question to our user
+    We assume user starts at step 2, step 1 is done by the contact who initiated the verification process  
+    Step 2, we ask our user to provide an answer to the contact's question
+    Then we compute a proof for our version of the contact's public-key fingerprint
+    Step 3, the contact receives our proof and tries to compuate the same proof
+    if it matches, he marks us as verified, otherwise, a failure notice is sent and both user and contact SMP state is deleted
+    After it matches, contact compuates a proof for his version of our public-key fingerprint
+    And sends it over
+    Step 4 user receive this proof and try to compute an identical one
+    If we succeed, the verification process is complete and we mark contact's as verified
+   
+    This provides a mathematical guarantee of authenticity and integrity for our long-term public keys 
+    IF the answer has enough entropy to be uncrackable *just* for the duration of the process
+       
 """
 
 from core.requests import http_request
@@ -285,139 +306,90 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
     try:
         response = http_request(f"{server_url}/smp/failure", "POST", payload = {"recipient": contact_id}, auth_token=auth_token)
     except:
+        logger.error("Failed to send SMP failure to server, either you are offline or the server is down")
         pass
-        # raise ValueError("Could not connect to server")
-   
+  
 
 
-def smp_verification_worker(user_data, user_data_lock, ui_queue, stop_flag):
-    """
-        Query server for new SMP verification messages
-        Check which step we are on
-        Act accordingly
-
-        We start at step 2, step 1 is done by the contact who initiated the verification process  
-        Step 2, we ask our user to provide an answer to the contact's question
-        Then we compute a proof for our version of the contact's public-key fingerprint
-        Step 3, the contact receives our proof and tries to compuate the same proof
-        if it matches, he marks us as verified, otherwise, a failure notice is sent and both user and contact SMP state is deleted
-        After it matches, contact compuates a proof for his version of our public-key fingerprint
-        And sends it over
-        Step 4 we receive this proof and try to compute an identical one
-        If we succeed, the verification process is complete and we mark contact's as verified
-       
-        This provides a mathematical guarantee of authenticity and integrity 
-        IF the answer has enough entropy to be uncrackable *just* for the duration of the process
-    """
-
-    
+def smp_unanswered_questions(user_data, user_data_lock, ui_queue):
     with user_data_lock:
-        user_data_copied = copy.deepcopy(user_data)
-
-
-    # Incase we received a question prompt right before the app exited last time
-    for contact_id in user_data_copied["contacts"]:
-        if user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["question"] and user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] == 2:
-            logger.info("We had an unanswered question from contact (%s)", contact_id)
-            ui_queue.put({
-                "type": "smp_question",
-                "contact_id": contact_id,
-                "question": user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["question"]
-            })
-
-
-
-    while not stop_flag.is_set():
-        with user_data_lock:
-            user_data_copied = copy.deepcopy(user_data)
-
-        server_url = user_data_copied["server_url"]
-        auth_token = user_data_copied["token"]
-    
-        try:
-            # Random longpoll number to help obfsucate traffic against analysis
-            response = http_request(f"{server_url}/get_smp/longpoll", "GET", auth_token=auth_token, longpoll=random_number_range(5, 30))
-        except TimeoutError:
-            continue
-
-        logger.debug("SMP messages: %s", json.dumps(response, indent=2))
-
-        for message in response["messages"]:
-            with user_data_lock:
-                user_data_copied = copy.deepcopy(user_data)
-
-            contact_id = message["sender"]
-
-
-            # We update here because the contact could've been added by the user since last time we've received a message
-            with user_data_lock:
-                user_data_copied = copy.deepcopy(user_data)
-
-            # New chat / contact request
-            if (not (contact_id in user_data_copied["contacts"])):
-                # We assume it has to be step 1 because the contact did not exist before
-                if message.get("step") != 1:
-                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
-                    continue
-
-                logger.info("We received a new SMP request for a contact we didnt see before")
-                # Get that public _key
-                contact_public_key = get_target_lt_public_key(user_data_copied, contact_id)
-
-                # Save them in-memory
-                save_contact(user_data, user_data_lock, contact_id, contact_public_key)
-
-                # Perform the next SMP step
-                smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
-
-                # Save new data on disk
-                save_account_data(user_data, user_data_lock)
-                
-
-                # Send request to UI to visually add the contact to contact list
-                logger.debug("Added new contact: %s", contact_id)
-
+        for contact_id in user_data["contacts"]:
+            if user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] and user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] == 2:
+                logger.info("We had an unanswered question from contact (%s)", contact_id)
                 ui_queue.put({
-                                "type": "new_contact",
-                                "contact_id": contact_id
-                             })
+                    "type": "smp_question",
+                    "contact_id": contact_id,
+                    "question": user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"]
+                })
 
-            # Same thing as above code, except that we don't fetch nor save the contact here
-            # as it's already fetched and saved
-            elif message["step"] == 1:
-                contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_public_key"]
 
-                # Perform the next SMP step
-                smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
+def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message):
+    contact_id = message["sender"]
 
-                save_account_data(user_data, user_data_lock)
-                
-            elif message["step"] == 2:
-                if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 1):
-                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
-                    continue
+    if (not "step" in message):
+        logger.error("Message has no 'step'. Maybe malicious server ? anyhow, we will ignore this SMP request. Message: %s", repr(message))
+        return
 
-                # Perform the next SMP step
-                smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue)
+    if not (message["step"] in [1, 2, 3, -1]):
+        logger.error("SMP 'step' is not in range of values we accept. We will ignore this SMP request. Step: %d", message["step"])
+        return
 
-                save_account_data(user_data, user_data_lock)
+    # Check if we don't have this contact saved
+    if (not (contact_id in user_data_copied["contacts"])):
+        # We assume it has to be step 1 because the contact did not exist before
+        if message["step"] != 1:
+            logger.error("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request because the step should've been 1, instead we got (%d)", message["step"])
+            return
 
-            elif message["step"] == 3:
-                if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 2):
-                    logger.warning("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
-                    continue
+        logger.info("We received a new SMP request for a contact we did not have saved")
 
-                # Perform the next SMP step
-                smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue)
+        # Get that public _key
+        contact_public_key = get_target_lt_public_key(user_data_copied, contact_id)
 
-                save_account_data(user_data, user_data_lock)
+        # Save them in-memory
+        save_contact(user_data, user_data_lock, contact_id, contact_public_key)
 
-            # SMP failure
-            elif (message["step"] == -1):
-                # Delete contact SMP state
-                smp_failure(user_data, user_data_lock, contact_id, ui_queue)
+        # Perform the next SMP step
+        smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
 
-                # Save new state on disk 
-                save_account_data(user_data, user_data_lock)
+        logger.debug("Saved new contact: %s", contact_id)
 
-                
+        # Send request to UI to visually add the contact to contact list
+        ui_queue.put({
+                        "type": "new_contact",
+                        "contact_id": contact_id
+                     })
+
+    # Same thing as above code, except that we don't fetch nor save the contact here
+    # as they're already fetched and saved
+    elif message["step"] == 1:
+        smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
+        
+    elif message["step"] == 2:
+        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 1):
+            logger.error("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
+            return
+
+        smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue)
+    elif message["step"] == 3:
+        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]) or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 2):
+            logger.error("something wrong, we or they are not synced? Not sure, but we will ignore this SMP request for now")
+            return
+
+        smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue)
+
+    # SMP failure on contact side
+    elif (message["step"] == -1):
+        # Delete SMP state for contact
+        smp_failure(user_data, user_data_lock, contact_id, ui_queue)
+
+    else:
+        logger.error("This is an impossible condition, either you have discovered a bug in Coldwire, or the server is malicious. Skipping weird SMP step (%d)...", message["step"])
+        return
+
+    save_account_data(user_data, user_data_lock)
+
+
+
+
+    ""

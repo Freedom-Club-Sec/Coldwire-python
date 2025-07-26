@@ -1,7 +1,6 @@
+from core.constants import *
 import oqs
 import secrets
-
-OTP_PADDING_LENGTH = 2
 
 def create_signature(algorithm: str, message: bytes, private_key: bytes) -> bytes:
     with oqs.Signature(algorithm, secret_key=private_key) as signer:
@@ -36,8 +35,7 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -
 
     """
 
-    # Here we make an assumption that the padding_limit will never exceed 65535 bytes
-    if padding_limit > 65535:
+    if padding_limit > ((2 ** (8 * OTP_PADDING_LENGTH)) - 1):
         raise ValueError("Padding too large")
 
     # NOTE: If padding_limit is 0, the plaintext_paddding_bytes would also be 0

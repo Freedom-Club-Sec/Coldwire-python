@@ -2,6 +2,7 @@ from core.requests import http_request
 from logic.storage import save_account_data
 from logic.pfs import send_new_ephemeral_keys, rotate_ephemeral_keys
 from core.crypto import *
+from core.constants import *
 from base64 import b64decode, b64encode
 import copy
 import json
@@ -126,8 +127,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     message_encoded = message.encode("utf-8")
 
-    # 1024 is the maxmium padding limit
-    message_otp_padding_length = max(0, 1024 - OTP_PADDING_LENGTH - len(message_encoded))
+    message_otp_padding_length = max(0, OTP_PADDING_LIMIT - OTP_PADDING_LENGTH - len(message_encoded))
 
     if (len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length) > len(our_pads):
         ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
@@ -239,7 +239,7 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
             logger.debug("Received a new message of type: %s", message["type"])
 
-            if message["type"] == "new_otp_batch":
+            if message["msg_type"] == "new_otp_batch":
                 payload_signature  = b64decode(message["payload_signature"], validate=True)
                 valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
                 if not valid_signature:
@@ -267,7 +267,7 @@ def messages_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
                 save_account_data(user_data, user_data_lock)
 
-            elif message["type"] == "new_message":
+            elif message["msg_type"] == "new_message":
                 payload_signature  = b64decode(message["payload_signature"], validate=True)
                 valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
                 if not valid_signature:

@@ -8,9 +8,7 @@ from ui.smp_setup_window import SMPSetupWindow
 from ui.smp_question_window import SMPQuestionWindow
 from logic.authentication import authenticate_account
 from logic.storage import check_account_file, load_account_data
-from logic.smp import smp_verification_worker
-from logic.pfs import perfect_forward_secrecy_worker
-from logic.message import messages_worker
+from logic.background_worker import background_worker
 from logic.utils import thread_failsafe_wrapper
 import tkinter as tk
 import sys
@@ -67,22 +65,19 @@ class ContactListWindow(tk.Tk):
         self.chat_windows_store_tmp = {}
 
         self.show_contacts()
-    def init_hooks_and_background_workers(self):
-        self.workers_stop_flag = threading.Event()
+    def init_hooks_and_background_worker(self):
+        self.worker_stop_flag = threading.Event()
 
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
         atexit.register(self.on_exit)
 
-        self.smp_thread      = threading.Thread(target=thread_failsafe_wrapper, args=(smp_verification_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
-        self.pfs_thread      = threading.Thread(target=thread_failsafe_wrapper, args=(perfect_forward_secrecy_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
-        self.messages_thread = threading.Thread(target=thread_failsafe_wrapper, args=(messages_worker, self.workers_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.workers_stop_flag))
 
-        self.smp_thread.start()
-        self.pfs_thread.start()
-        self.messages_thread.start()
+        self.background_worker_thread = threading.Thread(target=thread_failsafe_wrapper, args=(background_worker, self.worker_stop_flag, self.ui_queue, self.user_data, self.user_data_lock, self.ui_queue, self.worker_stop_flag))
+
+        self.background_worker_thread.start()
 
     def on_exit(self):
-        self.workers_stop_flag.set()
+        self.worker_stop_flag.set()
 
         # Incase the GUI was already destroyed 
         try:
@@ -90,10 +85,8 @@ class ContactListWindow(tk.Tk):
         except Exception:
             pass
         
-        # We let the threads do the cleanup for themselves, we already set their flag so they should know its time to exit
-        self.smp_thread.join()
-        self.pfs_thread.join()
-        self.messages_thread.join()
+        # We let the background_worker thread do the cleanup for its self, we already set the stop flag so it should know its time to exit
+        self.background_worker_thread.join()
 
     def poll_ui_queue(self):
         try:
@@ -207,8 +200,8 @@ class ContactListWindow(tk.Tk):
             self.new_contact(contact_id)
 
 
-        # We initialize background threads and hooks here to prevent race conditions
-        self.init_hooks_and_background_workers()
+        # We initialize the background worker thread and other hooks here to prevent race conditions
+        self.init_hooks_and_background_worker()
 
     def new_contact(self, contact_id):
         btn = tk.Button(
