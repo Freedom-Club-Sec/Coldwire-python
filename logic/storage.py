@@ -80,6 +80,17 @@ def load_account_data(password = None) -> dict:
         except TypeError:
             pass
 
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"], validate=True)
+        except TypeError:
+            pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"], validate=True)
+        except TypeError:
+            pass
+
+
 
     logger.debug("Loaded user_data from file (%s)", ACCOUNT_FILE_PATH)
 
@@ -135,6 +146,17 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
             user_data["contacts"][contact_id]["contact_pads"]["pads"] = b64encode(user_data["contacts"][contact_id]["contact_pads"]["pads"]).decode()
         except TypeError:
             pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"]).decode()
+        except TypeError:
+            pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"]).decode()
+        except TypeError:
+            pass
+
 
 
 
