@@ -15,10 +15,10 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = 
 
     kdf = Argon2id(
         salt=salt,
-        iterations=1,
-        memory_cost=262144,
+        iterations=ARGON2_ITERS,
+        memory_cost=ARGON2_MEMORY_COST,
         length=output_length,
-        lanes=4
+        lanes=ARGON2_LANES
     )
     return kdf.derive(password), salt
 

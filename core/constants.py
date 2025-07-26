@@ -13,8 +13,9 @@ OTP_PADDING_LENGTH = 2      # bytes
 OTP_PADDING_LIMIT  = 1024   # bytes 
 
 
-ARGON2_MEMORY     = 256 * 1024   # KB
-ARGON2_ITERS      = 3
-ARGON2_OUTPUT_LEN = 32           # bytes
-ARGON2_SALT_LEN   = 32           # bytes
-ARGON2_LANES      = 4
+ARGON2_MEMORY      = 256 * 1024   # KB
+ARGON2_ITERS       = 3
+ARGON2_MEMORY_COST = 262144       # bytes
+ARGON2_OUTPUT_LEN  = 32           # bytes
+ARGON2_SALT_LEN    = 32           # bytes
+ARGON2_LANES       = 4
