@@ -215,7 +215,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
         return
 
 
-    logger.debug("Received a new message of type: %s", message["type"])
+    logger.debug("Received a new message of type: %s", message["msg_type"])
 
     if message["msg_type"] == "new_otp_batch":
         payload_signature  = b64decode(message["payload_signature"], validate=True)
