@@ -45,9 +45,19 @@ class PasswordWindow(tk.Toplevel):
             self.status_label.config(text="Passwords do not match.")
             return
 
+        if len(password) < 8:
+            if not messagebox.askyesno("No Password", "Password is less than 8 characters long, this is insecure. Are you sure you want to continue?"):
+                return
+
+
+
         if not password:
             if not messagebox.askyesno("No Password", "You entered no password. Continue anyway?"):
                 return
+
+            if not messagebox.askyesno("No Password", "Disabling encryption allows anyone with access to your device to see your contacts, and cryptographic keys. Do this only in fully trusted environments. Are you sure?"):
+                return
+
         self.destroy()
         self.callback(password)
 
