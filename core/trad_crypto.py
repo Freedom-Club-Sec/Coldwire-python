@@ -16,7 +16,7 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = 
     kdf = Argon2id(
         salt=salt,
         iterations=ARGON2_ITERS,
-        memory_cost=ARGON2_MEMORY_COST,
+        memory_cost=ARGON2_MEMORY,
         length=output_length,
         lanes=ARGON2_LANES
     )
