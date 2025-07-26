@@ -15,7 +15,6 @@ import oqs
 
 logger = logging.getLogger(__name__)
 
-# TODO: Add hashchain replay protection
 def rotate_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> None:
     with user_data_lock:
         user_data_copied = copy.deepcopy(user_data)

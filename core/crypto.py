@@ -140,7 +140,7 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
 
     return shared_secrets[:otp_pad_size]
 
-def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = 10240, algorithm: str = "Kyber1024"):
+def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD_SIZE, algorithm: str = "Kyber1024"):
     """
         Generates shared_secrets of size otp_pad_size and returns both the ciphertext list-
         and the generated shared_secrets.
@@ -149,7 +149,7 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = 10240, 
 
 
         Default desired One-time-pad size is set to 10 kilobytes which is meant to accommodate-
-        10 messages, assuming every message is 1024 bytes with the padding applied.
+        around 10 messages, assuming every message is 1024 bytes with the padding applied.
 
 
         We concatenate the ciphertexts together safely because Kyper1024 has a defined fixed-size ciphertext-
