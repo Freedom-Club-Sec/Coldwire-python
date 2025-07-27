@@ -60,7 +60,7 @@ class ChatWindow(tk.Toplevel):
         self.append_message(f"You: {message}")
         return "break"
 
-    def append_message(self, message: str, save_msg: bool = True):
+    def append_message(self, message: str, save_msg: bool = True, contact_nickname: str = "Contact"):
         self.chat_display.config(state="normal")
         if message.startswith("You:"):
             self.chat_display.insert("end", "You:", "you")
@@ -71,8 +71,8 @@ class ChatWindow(tk.Toplevel):
             self.chat_display.insert("end", message[1:] + "\n")
         
         else:
-            self.chat_display.insert("end", "Contact:", "contact")
-            self.chat_display.insert("end", message[8:] + "\n")
+            self.chat_display.insert("end", contact_nickname + ":", "contact")
+            self.chat_display.insert("end", message[len(contact_nickname):] + "\n")
 
 
 

@@ -6,8 +6,9 @@ from ui.password_prompt import PasswordPrompt
 from ui.add_contact_prompt import AddContactPrompt
 from ui.smp_setup_window import SMPSetupWindow
 from ui.smp_question_window import SMPQuestionWindow
+from ui.contact_nickname_prompt import ContactNicknamePrompt
 from logic.authentication import authenticate_account
-from logic.storage import check_account_file, load_account_data
+from logic.storage import check_account_file, save_account_data, load_account_data
 from logic.background_worker import background_worker
 from logic.utils import thread_failsafe_wrapper
 import tkinter as tk
@@ -105,7 +106,14 @@ class ContactListWindow(tk.Tk):
                         logger.debug("Opening chat window for contact (%s) because a new message arrived", msg["contact_id"])
                         self.chat_windows_store_tmp[msg["contact_id"]] = ChatWindow(self, msg["contact_id"], self.ui_queue)
 
-                    self.chat_windows_store_tmp[msg["contact_id"]].append_message("Contact: " + msg["message"])
+                    with self.user_data_lock:
+                        contact_nickname = self.user_data["contacts"][msg["contact_id"]]["nickname"]
+                   
+
+                    if not contact_nickname:
+                        contact_nickname = "Contact"
+
+                    self.chat_windows_store_tmp[msg["contact_id"]].append_message(contact_nickname + ": " + msg["message"], contact_nickname=contact_nickname)
             
                 elif msg["type"] == "chat_closed":
                     del self.chat_windows_store_tmp[msg["contact_id"]]
@@ -163,7 +171,7 @@ class ContactListWindow(tk.Tk):
             cursor="hand2"
         )
         username_label.pack(side="left")
-        username_label.bind("<Button-1>", lambda e: self.copy_to_clipboard(username))
+        username_label.bind("<Button-1>", lambda e: self.copy_to_clipboard(username, "Your User ID has been copied to clipboard."))
 
         header_frame = tk.Frame(self, bg="black")
         header_frame.pack(pady=10)
@@ -191,35 +199,117 @@ class ContactListWindow(tk.Tk):
         add_button.image = plus_icon # Prevents garbage collection
         add_button.pack(side="left", padx=(5, 0))
 
-        self.contact_frame = tk.Frame(self, bg="black")
-        self.contact_frame.pack(fill="both", expand=True)
 
 
-        # Insert our saved contacts
-        for contact_id in self.user_data["contacts"]:
-            self.new_contact(contact_id)
+        canvas = tk.Canvas(self, bg="black", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        self.contact_frame = tk.Frame(canvas, bg="black")
 
+        self.contact_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        contact_window = canvas.create_window((0, 0), window=self.contact_frame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")) # Windows / Linux mouse scrolling support
+        canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units")) # MacOS
+        canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))  # MacOS again
+
+        canvas_frame = canvas.create_window((0, 0), window=self.contact_frame, anchor="nw")
+
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_frame, width=e.width))
+
+
+        # Draw our saved contacts
+        self.draw_contact_list()
 
         # We initialize the background worker thread and other hooks here to prevent race conditions
         self.init_hooks_and_background_worker()
 
+    def on_mousewheel(event):
+        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
     def new_contact(self, contact_id):
-        btn = tk.Button(
+        with self.user_data_lock:
+            contact_name = contact_id if not self.user_data["contacts"][contact_id]["nickname"] else self.user_data["contacts"][contact_id]["nickname"]
+            contact_is_verified = self.user_data["contacts"][contact_id]["lt_sign_key_smp"]["verified"]
+
+        button = tk.Button(
             self.contact_frame,
-            text=contact_id,
+            text=contact_name,
             bg="gray15",
             fg="white",
             relief="flat",
             anchor="w",
             command=lambda: self.open_chat(contact_id)
         )
-        btn.pack(fill="x", padx=15, pady=5)
+        button.pack(fill="x", padx=15, pady=5)
 
-    
-    def copy_to_clipboard(self, text):
+        context_menu = tk.Menu(self, tearoff=0)
+        context_menu.add_command(
+                label="Copy Contact ID", 
+                command=lambda: self.copy_to_clipboard(contact_id, "Contact ID has been copied to the clipboard")
+            )
+        context_menu.add_separator()
+
+        # If no nickname is set
+        if (contact_name == contact_id):
+            # We only allow setting nicknames after SMP verification succeeds 
+            if contact_is_verified:
+                context_menu.add_command(
+                    label="Set nickname", 
+                    command=lambda: self.change_contact_nickname(contact_id)
+                )
+        else:
+            context_menu.add_command(
+                    label="Change nickname", 
+                    command=lambda: self.change_contact_nickname(contact_id)
+                )
+
+            context_menu.add_separator()
+            
+            context_menu.add_command(
+                    label="Remove nickname", 
+                    command=lambda: self.remove_contact_nickname(contact_id)
+                )
+
+        button.bind("<Button-3>", lambda event: context_menu.tk_popup(event.x_root, event.y_root))  # Windows / Linux
+        button.bind("<Button-2>", lambda event: context_menu.tk_popup(event.x_root, event.y_root))  # MacOS
+
+    def change_contact_nickname(self, contact_id):
+        ContactNicknamePrompt(self, contact_id)
+
+    def remove_contact_nickname(self, contact_id):
+        with self.user_data_lock:
+            self.user_data["contacts"][contact_id]["nickname"] = None
+
+        logger.info("Removed nickname for contact (%s)", contact_id)
+        save_account_data(self.user_data, self.user_data_lock)
+        self.draw_contact_list()
+
+    def draw_contact_list(self):
+        logger.debug("Redrawing the contact list")
+        for widget in self.contact_frame.winfo_children():
+            widget.destroy()
+
+        with self.user_data_lock:
+            contact_ids = list(self.user_data["contacts"].keys())
+
+        for contact_id in self.user_data["contacts"]:
+            self.new_contact(contact_id)
+
+        logger.debug("Redrew the contact list")
+    def copy_to_clipboard(self, text, success_message):
         self.clipboard_clear()
         self.clipboard_append(text)
-        messagebox.showinfo("Copied", "Your User ID has been copied to clipboard.")
+        messagebox.showinfo("Copied", success_message)
 
     def open_chat(self, contact_id):
         with self.user_data_lock:
