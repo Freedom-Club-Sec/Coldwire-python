@@ -42,8 +42,11 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                     "our_keys": {
                             "private_key": None,
                             "public_key": None        
-                        }
-                    },
+                        }, 
+                    "our_hash_chain": None,
+                    "contact_hash_chain": None
+
+                },
                 "lt_sign_key_smp": {
                     "verified": False,
                     "pending_verification": False,
@@ -61,16 +64,14 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                         },
                     "rotation_counter": None,
                     "rotate_at": None,
-                    "our_hash_chain": None,
-                    "contact_hash_chain": None
 
                 },
                 "our_pads": {
-                    "replay_protection_number": None,
+                    "hash_chain": None,
                     "pads": None
                 },
                 "contact_pads": {
-                    "replay_protection_number": None,
+                    "hash_chain": None,
                     "pads": None
                 },
             }

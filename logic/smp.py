@@ -280,7 +280,6 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     # the contact as unverified despite verifiying him ?
     #
     
-    # 
     send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 
 

@@ -26,14 +26,14 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
     lt_sign_private_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
     
     # Check if we already have a hash chain for ourselves
-    if not user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"]:
+    if not user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"]:
         with user_data_lock:
             # Set up the hash chain's initial seed
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] = secrets.token_bytes(64)
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = secrets.token_bytes(64)
             
-            our_hash_chain = user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] 
+            our_hash_chain = user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] 
     else:
-        our_hash_chain = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] 
+        our_hash_chain = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] 
         # We continue the hash chain
         our_hash_chain = sha3_512(our_hash_chain)
 
@@ -67,7 +67,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
         # user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]      = None
 
 
-        user_data["contacts"][contact_id]["ephemeral_keys"]["our_hash_chain"] = our_hash_chain
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = our_hash_chain
 
         # Set rotation counters to rotate every 2 pad batches sent
         # TODO: Maybe rotate on every batch instead? and rework the counters, like we don't even need counters if we rotate on every batch sent.
@@ -114,12 +114,12 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
     contact_hash_chain       = contact_kyber_publickey_hashchain[:64]
 
     # If we do not have a hashchain for the contact, we don't need to compute the chain, just save.
-    if not user_data_copied["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"]:
+    if not user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"]:
         with user_data_lock:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"] = contact_hash_chain
+            user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
     
     else:
-        contact_last_hash_chain = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"]
+        contact_last_hash_chain = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"]
         contact_last_hash_chain = sha3_512(contact_last_hash_chain)
 
         if contact_last_hash_chain != contact_hash_chain:
@@ -127,7 +127,7 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
             return
 
     with user_data_lock:
-        user_data["contacts"][contact_id]["ephemeral_keys"]["contact_hash_chain"] = contact_hash_chain
+        user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
         user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = contact_kyber_public_key
 
 

@@ -1,6 +1,7 @@
 from core.requests import http_request
 from logic.storage import save_account_data
 from logic.pfs import send_new_ephemeral_keys
+from core.trad_crypto import sha3_512
 from core.crypto import *
 from core.constants import *
 from base64 import b64decode, b64encode
@@ -11,34 +12,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def generate_and_send_pads(user_data, user_data_lock, contact_id: str, contact_kyber_key, our_private_key, ui_queue) -> bool:
+def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue) -> bool:
     with user_data_lock: 
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
-        replay_protection_number = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
+ 
+        contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]
+        our_lt_private_key       = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
 
-    ciphertext_blob, pads = generate_kyber_shared_secrets(contact_kyber_key)
 
-    if not replay_protection_number:
-        # 1 because at this point, replay_protection_number is None.
-        replay_protection_number = randomize_replay_protection_number(1)
-    else:
+    ciphertext_blob, pads = generate_kyber_shared_secrets(contact_kyber_public_key)
 
-        # This +1 is needed to ensure it at least increments by 1
-        replay_protection_number += 1
-        replay_protection_number = randomize_replay_protection_number(replay_protection_number)
-
-    json_inner_payload = json.dumps({
-            "ciphertext_blob": b64encode(ciphertext_blob).decode(),
-            "replay_protection_number": replay_protection_number 
-        })
-
-    inner_payload_signature = create_signature("Dilithium5", json_inner_payload.encode("utf-8"), our_private_key)
-    inner_payload_signature = b64encode(inner_payload_signature).decode()
+    otp_batch_signature = create_signature("Dilithium5", ciphertext_blob, our_lt_private_key)
+    otp_batch_signature = b64encode(otp_batch_signature).decode()
 
     payload = {
-            "json_payload": json_inner_payload,
-            "payload_signature": inner_payload_signature,
+            "otp_hashchain_ciphertext": b64encode(ciphertext_blob).decode(),
+            "otp_hashchain_signature": otp_batch_signature,
             "recipient": contact_id
         }
     try:
@@ -49,8 +39,8 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, contact_k
     
     # We update & save only at the end, so if request fails, we do not desync our state.
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_pads"]["pads"] = pads
-        user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] = replay_protection_number
+        user_data["contacts"][contact_id]["our_pads"]["pads"]       = pads[64:]
+        user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = pads[:64]
 
     save_account_data(user_data, user_data_lock)
 
@@ -108,7 +98,9 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         # ephemeral key exchanges always get processed before messages do.
         # Which means if we generate and send pads with contact's, we would be using his old key, which would get overriden by the request, even if we send pads first
         # This is because of our server archiecture which prioritizes PFS requests before messages.
-        #
+        # 
+        # Another note, that means after batch ends, and rotation time comes, you won't be able to send messages until other contact is online.
+        # This will change in a future update 
         if rotation_counter == rotate_at:
             logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
             ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
@@ -117,7 +109,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
             save_account_data(user_data, user_data_lock)
             return False
 
-        if not generate_and_send_pads(user_data, user_data_lock, contact_id, contact_kyber_public_key, our_lt_private_key, ui_queue):
+        if not generate_and_send_pads(user_data, user_data_lock, contact_id, ui_queue):
             return False
         
 
@@ -128,11 +120,16 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
         logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
         
-
+ 
     with user_data_lock:
-        replay_protection_number = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
+        our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
+
 
     message_encoded = message.encode("utf-8")
+
+    next_hash_chain = sha3_512(our_hash_chain + message_encoded)
+
+    message_encoded = next_hash_chain + message_encoded
 
     message_otp_padding_length = max(0, OTP_PADDING_LIMIT - OTP_PADDING_LENGTH - len(message_encoded))
 
@@ -152,44 +149,22 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
     message_encrypted = otp_encrypt_with_padding(message_encoded, message_otp_pad, padding_limit = message_otp_padding_length)
     message_encrypted = b64encode(message_encrypted).decode()
 
-    # Unlike in other functions, we truncate pads here and update replay_protection_number regardless of request being successful or not
+    # Unlike in other functions, we truncate pads here and compute the next hash chain regardless of request being successful or not
     # because a malicious server could make our requests fail to force us to re-use the same pad for our next message 
     # which would break all of our security
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_pads"]["pads"] = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length:]
-
-        replay_protection_number  = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
-
-        # This ensures the replay counter always gets incremented by at very least 1
-        replay_protection_number += 1
-
-        # This helps obfsucate how many total messages were sent incase the request is intercepted
-        # Adversaries might be able to come with a modest guess of how many total messages were sent
-        # but never actually the exact amount, this provides some form of plausible deniability.
-        replay_protection_number = randomize_replay_protection_number(replay_protection_number)
-
-        user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"] = replay_protection_number
-
-        
+        user_data["contacts"][contact_id]["our_pads"]["pads"]       = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length:]
+        user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = next_hash_chain
 
     save_account_data(user_data, user_data_lock)
    
-
-    json_inner_payload = json.dumps({
-            "message_encrypted": message_encrypted,
-            "replay_protection_number": replay_protection_number
-        })
-
-    json_inner_payload_signature = create_signature("Dilithium5", json_inner_payload.encode("utf-8"), our_lt_private_key)
-    json_inner_payload_signature = b64encode(json_inner_payload_signature).decode()
-
-    payload = {
-            "json_payload": json_inner_payload,
-            "payload_signature": json_inner_payload_signature,
-            "recipient": contact_id
-        }
     try:
-        response = http_request(f"{server_url}/messages/send_message", "POST", payload=payload, auth_token=auth_token)
+        response = http_request(f"{server_url}/messages/send_message", "POST", payload = {
+                    "message_encrypted": message_encrypted,
+                    "recipient": contact_id
+                }, 
+                auth_token=auth_token
+            )
     except:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our message to the server"})
         return False
@@ -211,7 +186,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-        logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack by the server, we ignoring this Message for now.")
+        logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack, we ignoring this message for now.")
         return
 
 
@@ -225,67 +200,60 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
     logger.debug("Received a new message of type: %s", message["msg_type"])
 
     if message["msg_type"] == "new_otp_batch":
-        payload_signature  = b64decode(message["payload_signature"], validate=True)
-        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_public_key)
+        otp_hashchain_signature  = b64decode(message["otp_hashchain_signature"], validate=True)
+        otp_hashchain_ciphertext = b64decode(message["otp_hashchain_ciphertext"], validate=True)
+
+        valid_signature = verify_signature("Dilithium5", otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
         if not valid_signature:
-            logger.debug("Invalid OTP batch signature.. possible MiTM ?")
+            logger.debug("Invalid OTP_hashchain_ciphertext signature.. possible MiTM ?")
             return
-
-        json_payload = json.loads(message["json_payload"])
-
-        ciphertext_blob          = b64decode(json_payload["ciphertext_blob"], validate=True)
-        replay_protection_number = int(json_payload["replay_protection_number"])
 
         our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"]
 
         try:
-            contact_pads = decrypt_kyber_shared_secrets(ciphertext_blob, our_kyber_key)
+            contact_pads = decrypt_kyber_shared_secrets(otp_hashchain_ciphertext, our_kyber_key)
         except:
             logger.debug("Failed to decrypt shared_secrets, possible MiTM?")
             return
 
-        with user_data_lock:
-            user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
-            user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
 
-        logger.info("Saved contact (%s) new batch of One-Time-Pads", contact_id)
+        with user_data_lock:
+            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads[64:]
+            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = contact_pads[:64]
+
+        logger.info("Saved contact (%s) new batch of One-Time-Pads and hash chain seed", contact_id)
 
         save_account_data(user_data, user_data_lock)
 
     elif message["msg_type"] == "new_message":
-        payload_signature  = b64decode(message["payload_signature"], validate=True)
-        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_public_key)
-        if not valid_signature:
-            logger.debug("Invalid new message signature.. possible MiTM ?")
-            return
-
-        json_payload             = json.loads(message["json_payload"])
-        message_encrypted        = b64decode(json_payload["message_encrypted"], validate=True)
-        replay_protection_number = int(json_payload["replay_protection_number"])
+        message_encrypted = b64decode(message["message_encrypted"], validate=True)
 
         with user_data_lock:
-            contact_pads                     = user_data["contacts"][contact_id]["contact_pads"]["pads"]
-            contact_replay_protection_number = user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"]
-       
+            contact_pads       = user_data["contacts"][contact_id]["contact_pads"]["pads"]
+            contact_hash_chain = user_data["contacts"][contact_id]["contact_pads"]["hash_chain"]
 
         if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
             logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
             return
 
-        if (not contact_replay_protection_number) or (replay_protection_number <= contact_replay_protection_number):
-            logger.warning("Message replay_protection_number is equal or smaller than our saved replay_protection_number, this could be a possible replay attack, skipping this message...")
-            return
-
-
         message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
-       
         # immediately truncate the pads
         contact_pads = contact_pads[len(message_encrypted):] 
 
+        hash_chain        = message_decrypted[:64] 
+        message_decrypted = message_decrypted[64:]
+
+        next_hash_chain = sha3_512(contact_hash_chain + message_decrypted)
+
+        if next_hash_chain != hash_chain:
+            logger.warning("Message hash chain did not match, this could be a possible replay attack, or a failed tampering attempt. Skipping this message...")
+            return
+
+
         # and immediately save the new pads and replay protection number
         with user_data_lock:
-            user_data["contacts"][contact_id]["contact_pads"]["pads"]                     = contact_pads
-            user_data["contacts"][contact_id]["contact_pads"]["replay_protection_number"] = replay_protection_number
+            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads
+            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = next_hash_chain
 
         save_account_data(user_data, user_data_lock)
 
