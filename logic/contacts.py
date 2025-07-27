@@ -1,4 +1,33 @@
+import secrets
+import string
+import json
+import math
 import copy
+
+
+def generate_nickname_id(length: int = 4) -> str:
+    # Calculate nickname ID: digits get >= letters
+    digit_len  = math.ceil(length / 2)
+    letter_len = length - digit_len
+
+    digits  = ''.join(secrets.choice(string.digits)        for _ in range(digit_len))
+    letters = ''.join(secrets.choice(string.ascii_letters) for _ in range(letter_len))
+
+    return letters + digits
+
+def generate_random_nickname(user_data: dict, user_data_lock, contact_id: str, nicknames_prefixes_file: str = "assets/nicknames.json", nickname_id_len = 4) -> str:
+    with open(nicknames_prefixes_file, "r", encoding="utf-8") as f:
+        nickname_prefixes = json.load(f)["nicknames"]
+
+    with user_data_lock:
+        existing_nicknames = {v["nickname"] for v in user_data.get("contacts", {}).values()}
+
+
+    while True:
+        nickname = secrets.choice(nickname_prefixes) + " " + generate_nickname_id(length = nickname_id_len)
+        if nickname not in existing_nicknames:
+            return nickname
+
 
 def save_contact(user_data: dict, user_data_lock, contact_id: str, contact_public_key: bytes) -> None:
     with user_data_lock:
@@ -11,6 +40,7 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str, contact_publi
        
         
         user_data["contacts"][contact_id] = {
+                "nickname": None,
                 "lt_sign_public_key": contact_public_key,
                 "lt_sign_key_smp": {
                     "verified": False,
