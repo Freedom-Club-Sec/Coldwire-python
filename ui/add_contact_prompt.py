@@ -1,6 +1,6 @@
 from tkinter import messagebox
 from ui.utils import *
-from logic.get_user import get_target_lt_public_key
+from logic.get_user import check_if_contact_exists
 from logic.contacts import save_contact
 from logic.storage import save_account_data
 import tkinter as tk
@@ -51,8 +51,11 @@ class AddContactPrompt(tk.Toplevel):
             return
             
         try:
-            contact_public_key = get_target_lt_public_key(self.master.user_data, contact_id)
-            save_contact(self.master.user_data, self.master.user_data_lock, contact_id, contact_public_key)
+            if not check_if_contact_exists(self.master.user_data, self.master.user_data_lock, contact_id):
+                logger.info("[BUG] This should never execute, because the server should return a 40X error code and that should cause an exception..")
+                return
+
+            save_contact(self.master.user_data, self.master.user_data_lock, contact_id)
             save_account_data(self.master.user_data, self.master.user_data_lock)
         except ValueError as e:
             self.status.config(text=e, fg="red")

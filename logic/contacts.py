@@ -29,19 +29,21 @@ def generate_random_nickname(user_data: dict, user_data_lock, contact_id: str, n
             return nickname
 
 
-def save_contact(user_data: dict, user_data_lock, contact_id: str, contact_public_key: bytes) -> None:
+def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
     with user_data_lock:
         if contact_id in user_data["contacts"]:
             raise ValueError("Contact already saved!")
 
-        for i, v in user_data["contacts"].items():
-            if v["lt_sign_public_key"] == contact_public_key:
-                raise ValueError("Contact long-term auth signing public-key is duplicated, and we have no idea why")
-       
         
         user_data["contacts"][contact_id] = {
                 "nickname": None,
-                "lt_sign_public_key": contact_public_key,
+                "lt_sign_keys": {
+                    "contact_public_key": None,
+                    "our_keys": {
+                            "private_key": None,
+                            "public_key": None        
+                        }
+                    },
                 "lt_sign_key_smp": {
                     "verified": False,
                     "pending_verification": False,
@@ -62,13 +64,6 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str, contact_publi
                     "our_hash_chain": None,
                     "contact_hash_chain": None
 
-                },
-                "message_sign_keys": {
-                    "contact_public_key": None,
-                    "our_keys": {
-                        "private_key": None,
-                        "public_key": None        
-                    }
                 },
                 "our_pads": {
                     "replay_protection_number": None,

@@ -1,6 +1,6 @@
 from core.requests import http_request
 from logic.storage import save_account_data
-from logic.pfs import send_new_ephemeral_keys, rotate_ephemeral_keys
+from logic.pfs import send_new_ephemeral_keys
 from core.crypto import *
 from core.constants import *
 from base64 import b64decode, b64encode
@@ -74,10 +74,12 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
         contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]
-        our_d5_private_key       = user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["private_key"]
+        our_lt_private_key       = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
 
 
-    if (not contact_kyber_public_key) or (not our_d5_private_key):
+     
+    if (not contact_kyber_public_key):
+        logger.debug("This shouldn't usually happen, contact kyber keys are not initialized even once yet???")
         ui_queue.put({
                 "type": "showwarning",
                 "title": f"Warning for {contact_id[:32]}",
@@ -88,41 +90,46 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         return False
 
 
-    with user_data_lock:
-        our_pads_empty = bool(user_data["contacts"][contact_id]["our_pads"]["pads"])
-
-
-    # If we have keys, but not enough one-time-pads, we send new pads to the contact
-    if not our_pads_empty:
-        logger.debug("Not enough pads to send message")
-
-        if not generate_and_send_pads(user_data, user_data_lock, contact_id, contact_kyber_public_key, our_d5_private_key, ui_queue):
-            return False
-        
-       
-        with user_data_lock:
-            # Increment the rotation_counter
-            user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] += 1
-
-            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"]
-            rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
-
-        
-        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
-
-        # See if we should rotate our keys
-        if rotation_counter == rotate_at:
-            logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
-            ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
-            rotate_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
-
-            save_account_data(user_data, user_data_lock)
-            return False
-        
-        
 
     with user_data_lock:
         our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
+
+    # If we have keys, but no one-time-pads, we send new pads to the contact
+    if not our_pads:
+        logger.debug("We have no pads to send message")
+
+        with user_data_lock:
+        
+            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"]
+            rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
+
+
+        # We rotate keys before generating and sending new batch of pads because
+        # ephemeral key exchanges always get processed before messages do.
+        # Which means if we generate and send pads with contact's, we would be using his old key, which would get overriden by the request, even if we send pads first
+        # This is because of our server archiecture which prioritizes PFS requests before messages.
+        #
+        if rotation_counter == rotate_at:
+            logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
+            ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
+            send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
+
+            save_account_data(user_data, user_data_lock)
+            return False
+
+        if not generate_and_send_pads(user_data, user_data_lock, contact_id, contact_kyber_public_key, our_lt_private_key, ui_queue):
+            return False
+        
+
+        with user_data_lock:
+            our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
+
+            user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] += 1
+
+        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
+        
+
+    with user_data_lock:
         replay_protection_number = user_data["contacts"][contact_id]["our_pads"]["replay_protection_number"]
 
     message_encoded = message.encode("utf-8")
@@ -173,7 +180,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
             "replay_protection_number": replay_protection_number
         })
 
-    json_inner_payload_signature = create_signature("Dilithium5", json_inner_payload.encode("utf-8"), our_d5_private_key)
+    json_inner_payload_signature = create_signature("Dilithium5", json_inner_payload.encode("utf-8"), our_lt_private_key)
     json_inner_payload_signature = b64encode(json_inner_payload_signature).decode()
 
     payload = {
@@ -208,9 +215,9 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
         return
 
 
-    contact_d5_public_key = user_data_copied["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]
+    contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
 
-    if not contact_d5_public_key:
+    if not contact_public_key:
         logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
         return
 
@@ -219,7 +226,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
 
     if message["msg_type"] == "new_otp_batch":
         payload_signature  = b64decode(message["payload_signature"], validate=True)
-        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
+        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_public_key)
         if not valid_signature:
             logger.debug("Invalid OTP batch signature.. possible MiTM ?")
             return
@@ -247,7 +254,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
 
     elif message["msg_type"] == "new_message":
         payload_signature  = b64decode(message["payload_signature"], validate=True)
-        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_d5_public_key)
+        valid_signature = verify_signature("Dilithium5", message["json_payload"].encode("utf-8"), payload_signature, contact_public_key)
         if not valid_signature:
             logger.debug("Invalid new message signature.. possible MiTM ?")
             return

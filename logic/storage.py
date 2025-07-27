@@ -44,9 +44,6 @@ def load_account_data(password = None) -> dict:
     user_data["lt_auth_sign_keys"]["public_key"]  = b64decode(user_data["lt_auth_sign_keys"]["public_key"], validate=True)
 
     for contact_id in user_data["contacts"]:
-        user_data["contacts"][contact_id]["lt_sign_public_key"] = b64decode(user_data["contacts"][contact_id]["lt_sign_public_key"], validate=True)
-        
-
         # They probably haven't exchanged yet, so it's fine to skip decoding them 
         try:
             user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"], validate=True)
@@ -60,13 +57,13 @@ def load_account_data(password = None) -> dict:
             pass
 
         try:
-            user_data["contacts"][contact_id]["message_sign_keys"]["contact_public_key"] = b64decode(user_data["contacts"][contact_id]["message_sign_keys"]["contact_public_key"], validate=True)
+            user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"] = b64decode(user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"], validate=True)
         except TypeError:
             pass
         
         try:
-            user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["private_key"] = b64decode(user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["private_key"], validate=True)
-            user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["public_key"] = b64decode(user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["public_key"], validate=True)
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = b64decode(user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"], validate=True)
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = b64decode(user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"], validate=True)
         except TypeError:
             pass
 
@@ -111,8 +108,6 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
     user_data["lt_auth_sign_keys"]["public_key"]  = b64encode(user_data["lt_auth_sign_keys"]["public_key"]).decode()
 
     for contact_id in user_data["contacts"]:
-        user_data["contacts"][contact_id]["lt_sign_public_key"] = b64encode(user_data["contacts"][contact_id]["lt_sign_public_key"]).decode()
-        
         # They probably haven't exchanged yet, so it's fine to skip decoding them 
         try:
             user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]).decode()
@@ -127,13 +122,13 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
 
         
         try:
-            user_data["contacts"][contact_id]["message_sign_keys"]["contact_public_key"] = b64encode(user_data["contacts"][contact_id]["message_sign_keys"]["contact_public_key"]).decode()
+            user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"] = b64encode(user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]).decode()
         except TypeError:
             pass
         
         try:
-            user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["private_key"] = b64encode(user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["private_key"]).decode()
-            user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["public_key"] = b64encode(user_data["contacts"][contact_id]["message_sign_keys"]["our_keys"]["public_key"]).decode()
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = b64encode(user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]).decode()
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = b64encode(user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]).decode()
         except TypeError:
             pass
 
