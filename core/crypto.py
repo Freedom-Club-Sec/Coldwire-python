@@ -111,7 +111,7 @@ def generate_kem_keys(algorithm: str = "Kyber1024"):
         return private_key, public_key
 
 
-def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = 10240, algorithm: str = "Kyber1024"):
+def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
     """
         Decapsulates shared_secrets of size otp_pad_size and returns the resulting shared_secrets.
         The ciphertexts_blob is expected to be a concatenated sequence of Kyber ciphertexts,
@@ -123,11 +123,12 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
         split the blob and decapsulate in order.
     """
 
+    cipher_size    = 1568  # Kyber1024 ciphertext size
+    
     shared_secrets = b''
-    cipher_size = 1568  # Kyber1024 ciphertext size
-    cursor = 0
+    cursor         = 0
 
-    with oqs.KeyEncapsulation(algorithm, secret_key=private_key) as kem:
+    with oqs.KeyEncapsulation("Kyber1024", secret_key=private_key) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
 
@@ -140,7 +141,7 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
 
     return shared_secrets[:otp_pad_size]
 
-def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD_SIZE, algorithm: str = "Kyber1024"):
+def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
     """
         Generates shared_secrets of size otp_pad_size and returns both the ciphertext list-
         and the generated shared_secrets.
@@ -159,7 +160,7 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD
     shared_secrets   = b''
     ciphertexts_blob = b''
 
-    with oqs.KeyEncapsulation(algorithm) as kem:
+    with oqs.KeyEncapsulation("Kyber1024") as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext, shared_secret = kem.encap_secret(public_key)
 
@@ -168,9 +169,6 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD
 
     return ciphertexts_blob, shared_secrets[:otp_pad_size]
 
-
-def randomize_replay_protection_number(replay_protection_number: int) -> int:
-    return random_number_range(replay_protection_number, random_number_range(replay_protection_number + 1, replay_protection_number + random_number_range(100, 1000)))
 
 def random_number_range(a: int, b: int) -> int:
     return secrets.randbelow(b - a + 1) + a

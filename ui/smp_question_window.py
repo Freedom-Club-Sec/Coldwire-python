@@ -51,6 +51,6 @@ class SMPQuestionWindow(tk.Toplevel):
             messagebox.showerror("Error", "You need to provide an answer.")
             return
 
-        smp_step_2_answer_provided(self.master.user_data, self.master.user_data_lock, self.contact_id, answer)
+        smp_step_2_answer_provided(self.master.user_data, self.master.user_data_lock, self.contact_id, answer, self.master.ui_queue)
 
         self.destroy()

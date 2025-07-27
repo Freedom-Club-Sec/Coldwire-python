@@ -33,9 +33,8 @@
 from core.requests import http_request
 from logic.storage import save_account_data
 from logic.contacts import save_contact
-from logic.get_user import get_target_lt_public_key
 from logic.pfs import send_new_ephemeral_keys
-from core.crypto import random_number_range
+from core.crypto import random_number_range, generate_sign_keys
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 import hashlib
@@ -62,10 +61,13 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
     
     our_nonce = b64encode(secrets.token_bytes(32)).decode()
 
+    private_key, public_key = generate_sign_keys()
+
     try:
         response = http_request(f"{server_url}/smp/initiate", "POST", payload = {
             "question": question,
             "nonce": our_nonce,
+            "public_key": b64encode(public_key).decode(),
             "recipient": contact_id
 
         }, auth_token=auth_token)
@@ -86,25 +88,32 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"]            = our_nonce
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"]             = 1
 
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = private_key
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = public_key
+
 
 
     logger.debug("Initiated SMP for %s", contact_id)
     save_account_data(user_data, user_data_lock)
 
 
-def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer) -> None:
+def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer, ui_queue) -> None:
     answer = normalize_answer(answer)
 
     our_nonce = secrets.token_bytes(32)
+
+    private_key, public_key = generate_sign_keys()
+    
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
 
         # We already check on server that base64 of nonce is valid, and if the server wants to crash us, it can through other ways :)
         contact_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"], validate=True)
-        contact_public_key = user_data["contacts"][contact_id]["lt_sign_public_key"]
+        
+        contact_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
 
-            # We use SHA3-512, because SHA3's Keccak sponge remains indifferentitable from a random oracle even under quantum attacks
+    # We use SHA3-512, because SHA3's Keccak sponge remains indifferentitable from a random oracle even under quantum attacks
     contact_key_fingerprint = sha3_512(contact_public_key)
 
     # Derieve a high-entropy secret key from the low-entropy answer 
@@ -117,10 +126,12 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer) ->
 
     logger.debug("Our message: %s", our_message)
 
+    
     try:
         response = http_request(f"{server_url}/smp/step_2", "POST", payload = {
             "proof": our_message,
             "nonce": b64encode(our_nonce).decode(),
+            "public_key": b64encode(public_key).decode(),
             "recipient": contact_id
 
         }, auth_token=auth_token)
@@ -135,12 +146,15 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer) ->
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"] = b64encode(our_nonce).decode()
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"] = answer
 
-
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = private_key
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = public_key
 
 
 
 def smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue) -> None:
     with user_data_lock:
+        user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]      = b64decode(message["public_key"], validate=True)
+        
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"] = True
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"]             = message["question"]
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"]        = message["nonce"]
@@ -159,10 +173,14 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
 
-        answer = normalize_answer(user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"])
-        our_public_key = user_data["lt_auth_sign_keys"]["public_key"]
-        our_nonce = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
-        contact_public_key = user_data["contacts"][contact_id]["lt_sign_public_key"]
+        answer         = normalize_answer(user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"])
+
+        our_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]
+        our_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
+
+        contact_public_key = b64decode(message["public_key"], validate=True)
+
+        user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"] = b64decode(message["public_key"], validate=True)
 
     
     contact_nonce = b64decode(message["nonce"], validate=True)
@@ -219,11 +237,11 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
         answer = normalize_answer(user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"])
 
-        our_public_key     = user_data["lt_auth_sign_keys"]["public_key"]
+        our_public_key     = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]
         our_nonce          = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
         contact_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"], validate=True)
-        contact_public_key = user_data["contacts"][contact_id]["lt_sign_public_key"]
 
+        contact_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
     
     our_key_fingerprint = sha3_512(our_public_key)
 
@@ -261,6 +279,7 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     # NOTE: Maybe we need a delay here to ensure if a failure occured in contact's step 3, we catch it and mark 
     # the contact as unverified despite verifiying him ?
     #
+    
     send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 
 
@@ -343,11 +362,9 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
 
         logger.info("We received a new SMP request for a contact we did not have saved")
 
-        # Get that public _key
-        contact_public_key = get_target_lt_public_key(user_data_copied, contact_id)
 
         # Save them in-memory
-        save_contact(user_data, user_data_lock, contact_id, contact_public_key)
+        save_contact(user_data, user_data_lock, contact_id)
 
         # Perform the next SMP step
         smp_step_2_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)

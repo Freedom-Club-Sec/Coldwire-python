@@ -9,7 +9,7 @@ LONGPOLL_MAX  = 30      # seconds
 # crypto parameters
 AES_GCM_NONCE_LEN = 12  # bytes
 
-OTP_PAD_SIZE       = 10240  # bytes
+OTP_PAD_SIZE       = 11264  # bytes
 OTP_PADDING_LENGTH = 2      # bytes
 OTP_PADDING_LIMIT  = 1024   # bytes 
 

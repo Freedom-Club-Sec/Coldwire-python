@@ -1,28 +1,24 @@
-from base64 import b64decode
 from core.requests import http_request
 
-def get_target_lt_public_key(user_data: dict, target_id: str) -> bytes:
-    url = user_data["server_url"]
+def check_if_contact_exists(user_data: dict, user_data_lock, contact_id: str) -> bool:
+    with user_data_lock:
+        url = user_data["server_url"]
 
     try:
-        response = http_request(f"{url}/get_user?user_id={target_id}", "GET")
+        response = http_request(f"{url}/get_user?user_id={contact_id}", "GET")
     except:
         raise ValueError("Could not connect to server, try again")
 
     if not "status" in response:
-        raise ValueError("Server gave a malformed response! This could be a malicious act, we suggest you retry and if problem persists use another server")
+        raise ValueError("Server gave a malformed response")
 
-    if response["status"] == "failure" or not response.get("public_key"):
+    if response["status"] == "failure":
         if not 'error' in response:
-            raise ValueError("Server gave a malformed response! This could be a malicious act, we suggest you retry and if problem persists use another server")
+            raise ValueError("Server gave a malformed response")
         else:
             raise ValueError(response["error"][:1024])
 
     if response["status"] == "success":
+        return True 
 
-        # Dry run to validate server's base64. Helps prevents denial-of-service startup crashes -
-        # when client first reads parses their account file
-        try:
-            return b64decode(response["public_key"], validate=True)
-        except:
-            raise ValueError("Server gave a malformed public_key! This could be a malicious act, we suggest you retry and if problem persists use another server")
+    return False

@@ -1,7 +1,6 @@
 from core.requests import http_request
 from logic.storage import save_account_data
 from logic.contacts import save_contact
-from logic.get_user import get_target_lt_public_key
 from logic.smp import smp_unanswered_questions, smp_data_handler
 from logic.pfs import pfs_data_handler
 from logic.message import messages_data_handler
