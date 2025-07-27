@@ -111,7 +111,7 @@ def generate_kem_keys(algorithm: str = "Kyber1024"):
         return private_key, public_key
 
 
-def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = 10240):
+def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
     """
         Decapsulates shared_secrets of size otp_pad_size and returns the resulting shared_secrets.
         The ciphertexts_blob is expected to be a concatenated sequence of Kyber ciphertexts,
@@ -123,9 +123,10 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
         split the blob and decapsulate in order.
     """
 
+    cipher_size    = 1568  # Kyber1024 ciphertext size
+    
     shared_secrets = b''
-    cipher_size = 1568  # Kyber1024 ciphertext size
-    cursor = 0
+    cursor         = 0
 
     with oqs.KeyEncapsulation("Kyber1024", secret_key=private_key) as kem:
         while len(shared_secrets) < otp_pad_size:

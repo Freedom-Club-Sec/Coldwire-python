@@ -263,7 +263,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
             return
 
 
-        # and immediately save the new pads and replay protection number
+        # and immediately save the new pads and the hash chain
         with user_data_lock:
             user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads
             user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = next_hash_chain
