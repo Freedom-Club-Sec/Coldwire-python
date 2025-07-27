@@ -82,16 +82,15 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
     with user_data_lock:
-        our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
+        our_pads         = user_data["contacts"][contact_id]["our_pads"]["pads"]
+       
+        rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"]
+        rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
+
 
     # If we have keys, but no one-time-pads, we send new pads to the contact
     if not our_pads:
         logger.debug("We have no pads to send message")
-
-        with user_data_lock:
-        
-            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"]
-            rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
 
 
         # We rotate keys before generating and sending new batch of pads because
@@ -115,7 +114,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
         with user_data_lock:
             our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
-
             user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] += 1
 
         logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
@@ -126,20 +124,35 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
     message_encoded = message.encode("utf-8")
-
     next_hash_chain = sha3_512(our_hash_chain + message_encoded)
-
     message_encoded = next_hash_chain + message_encoded
 
     message_otp_padding_length = max(0, OTP_PADDING_LIMIT - OTP_PADDING_LENGTH - len(message_encoded))
 
     if (len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length) > len(our_pads):
-        ui_queue.put({"type": "showerror", "title": "Failed to send message", "message": f"Your message size ({len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length}) is larger than our pads size ({len(our_pads)}), please send a shorter message"})
-        return False
+        logger.info("Your message size (%d)  is larger than our pads size (%s), therefore we are generating new pads for you", len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length, len(our_pads))
+        
+        if not generate_and_send_pads(user_data, user_data_lock, contact_id, ui_queue):
+            return False
+
+        with user_data_lock:
+            our_pads        = user_data["contacts"][contact_id]["our_pads"]["pads"]
+            our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
+
+            user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] += 1
+
+        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
+        
+        # We remove old hashchain from message and calculate new next hash in the chain
+        message_encoded = message_encoded[64:]
+        next_hash_chain = sha3_512(our_hash_chain + message_encoded)
+        message_encoded = next_hash_chain + message_encoded
+
 
     message_otp_pad = our_pads[:len(message_encoded) + OTP_PADDING_LENGTH + message_otp_padding_length]
 
     logger.debug("Our pad size is %d and new size after the message is %d", len(our_pads), len(our_pads) - len(message_otp_pad))
+
     # We one-time-pad encrypt the message with padding
     #
     # NOTE: The padding only protects short-messages which are easy to infer what is said based purely on message length 
