@@ -13,7 +13,7 @@ Implements:
 Notes:
 - Kyber keys and ciphertext sizes follow NIST spec for ML-KEM-1024.
 - Dilithium5 keys/signature sizes follow NIST spec for ML-DSA-87.
-- OTP padding randomizes message lengths to resist traffic analysis.
+- OTP padding randomizes message lengths to resist ciphertext length analysis.
 """
 
 import oqs
