@@ -217,7 +217,7 @@ class ContactListWindow(tk.Tk):
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")) # Windows / Linux mouse scrolling support
+        canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")) # Windows / Linux mouse scrolling support
         canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units")) # MacOS
         canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))  # MacOS again
 
@@ -302,7 +302,7 @@ class ContactListWindow(tk.Tk):
         with self.user_data_lock:
             contact_ids = list(self.user_data["contacts"].keys())
 
-        for contact_id in self.user_data["contacts"]:
+        for contact_id in contact_ids:
             self.new_contact(contact_id)
 
         logger.debug("Redrew the contact list")

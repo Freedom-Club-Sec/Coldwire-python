@@ -1,7 +1,5 @@
 from urllib import request
-import urllib
 import json
-import time
 
 def http_request(url: str, method: str, auth_token: str = None, payload: dict = None, longpoll: int = -1) -> dict:
     if payload:
@@ -16,8 +14,7 @@ def http_request(url: str, method: str, auth_token: str = None, payload: dict = 
     if auth_token:
         req.add_header("Authorization", "Bearer " + auth_token)
 
-    # urllib raises a HTTPError for status code >= 400
-    # try:
+    # NOTE: urllib raises a HTTPError for status code >= 400
     if longpoll == -1:
         with request.urlopen(req) as response:
             return json.loads(response.read().decode())
@@ -25,6 +22,3 @@ def http_request(url: str, method: str, auth_token: str = None, payload: dict = 
         with request.urlopen(req, timeout=longpoll) as response:
             return json.loads(response.read().decode())
 
-
-    # except urllib.error.HTTPError as e:
-    #    return json.loads(e.read().decode())

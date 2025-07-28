@@ -28,7 +28,6 @@ from core.constants import (
     ML_DSA_87_NAME,  
 )
 from base64 import b64decode, b64encode
-import copy
 import json
 import logging
 
@@ -61,8 +60,8 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
             "recipient": contact_id
         }
     try:
-        response = http_request(f"{server_url}/messages/send_pads", "POST", payload=payload, auth_token=auth_token)
-    except:
+        http_request(f"{server_url}/messages/send_pads", "POST", payload=payload, auth_token=auth_token)
+    except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our one-time-pads key batch to the server"})
         return False
     
@@ -87,7 +86,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
     Returns:
         bool: True if successful, False otherwise.
     """
-    # We don't deepcopy here as real-time states are required here for maximum future-proofing.
 
     with user_data_lock:
         if contact_id in user_data["tmp"]["ephemeral_key_send_lock"]:
@@ -103,8 +101,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
         contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]
-        our_lt_private_key       = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
-
 
      
     if (not contact_kyber_public_key):
@@ -112,7 +108,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         ui_queue.put({
                 "type": "showwarning",
                 "title": f"Warning for {contact_id[:32]}",
-                "message": f"Ephemeral keys have not yet initialized, maybe contact is offline. We will notify you when keys are initialized"
+                "message": "Ephemeral keys have not yet initialized, maybe contact is offline. We will notify you when keys are initialized"
             })
 
         send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
@@ -211,7 +207,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
     save_account_data(user_data, user_data_lock)
    
     try:
-        response = http_request(f"{server_url}/messages/send_message", "POST", payload = {
+        http_request(f"{server_url}/messages/send_message", "POST", payload = {
                     "message_encrypted": message_encrypted,
                     "recipient": contact_id
                 }, 

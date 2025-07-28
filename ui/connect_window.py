@@ -3,7 +3,6 @@ from ui.password_window import PasswordWindow
 from logic.storage import save_account_data
 from logic.authentication import authenticate_account
 from core.crypto import generate_sign_keys
-from base64 import b64encode
 from urllib.parse import urlparse
 import tkinter as tk
 import logging
@@ -200,7 +199,7 @@ class ServerConnectWindow(tk.Toplevel):
 
         try:
             self.server_url_fixed = self.clean_server_url(self.server_url_fixed)
-        except:
+        except Exception:
             self.status_label.config(text="Server address is invalid!")
             return
 

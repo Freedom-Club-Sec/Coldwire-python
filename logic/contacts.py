@@ -2,7 +2,6 @@ import secrets
 import string
 import json
 import math
-import copy
 
 
 def generate_nickname_id(length: int = 4) -> str:

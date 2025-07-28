@@ -101,7 +101,7 @@ class ContactNicknamePrompt(tk.Toplevel):
 
         if len(nickname) > 32:
             messagebox.showerror("Error", "Nickname must be less than 32 characters long!")
-            return1
+            return
 
         if nickname != self.random_nickname:
             if not messagebox.askyesno(

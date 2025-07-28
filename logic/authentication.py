@@ -15,7 +15,7 @@ def authenticate_account(user_data: dict) -> dict:
         response = http_request(url + "/authenticate/init", "POST", payload = {"public_key": public_key_encoded, "user_id": user_id })
         if not 'challenge' in response:
             raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
-    except:
+    except Exception:
         if 'proxy_info' in user_data:
             raise ValueError("Could not connect to server! Are you sure your proxy settings are valid ?")
         else:
@@ -23,7 +23,7 @@ def authenticate_account(user_data: dict) -> dict:
 
     try:
         challenge = b64decode(response["challenge"], validate=True)
-    except:
+    except Exception:
         raise ValueError("Server gave a malformed challenge! Are you sure this is Coldwire server ?")
 
 
@@ -31,7 +31,7 @@ def authenticate_account(user_data: dict) -> dict:
 
     try:
         response = http_request(url + "/authenticate/verify", "POST", payload = {"signature": b64encode(signature).decode(), "challenge": response["challenge"]})
-    except:
+    except Exception:
         raise ValueError("Server gave a malformed response, your account is probably missing from the server")
 
     required_keys = ["status", "user_id", "token"]

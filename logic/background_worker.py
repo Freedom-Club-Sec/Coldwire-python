@@ -1,6 +1,4 @@
 from core.requests import http_request
-from logic.storage import save_account_data
-from logic.contacts import save_contact
 from logic.smp import smp_unanswered_questions, smp_data_handler
 from logic.pfs import pfs_data_handler
 from logic.message import messages_data_handler
@@ -9,12 +7,6 @@ from core.constants import (
     LONGPOLL_MAX
 )
 from core.crypto import random_number_range
-from core.trad_crypto import derive_key_argon2id, sha3_512
-from base64 import b64encode, b64decode
-import hashlib
-import secrets
-import hmac
-import time
 import copy
 import logging
 import json

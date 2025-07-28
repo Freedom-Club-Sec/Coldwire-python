@@ -20,7 +20,6 @@ import oqs
 import secrets
 from core.constants import (
     OTP_PAD_SIZE,
-    OTP_PADDING_LIMIT,
     OTP_PADDING_LENGTH,
     ML_KEM_1024_NAME,
     ML_KEM_1024_SK_LEN,

@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import messagebox
 from logic.message import send_message_processor
 
 class ChatWindow(tk.Toplevel):

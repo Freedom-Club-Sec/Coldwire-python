@@ -1,4 +1,6 @@
 """
+    logic/smp.py
+    ----------
     The socialist millionaire problem
     A variant of Yao's millionaire problem
 
@@ -34,16 +36,13 @@ from core.requests import http_request
 from logic.storage import save_account_data
 from logic.contacts import save_contact
 from logic.pfs import send_new_ephemeral_keys
-from core.crypto import random_number_range, generate_sign_keys
+from core.crypto import generate_sign_keys
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 import hashlib
 import secrets
 import hmac
-import time
-import copy
 import logging
-import json
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
             "recipient": contact_id
 
         }, auth_token=auth_token)
-    except:
+    except Exception:
         raise ValueError("Could not connect to server")
 
     if (not ("status" in response)) or response["status"] != "success":
@@ -135,7 +134,7 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer, ui
             "recipient": contact_id
 
         }, auth_token=auth_token)
-    except:
+    except Exception:
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
@@ -217,11 +216,11 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     logger.debug("Message to contact: %s", our_message)
     
     try:
-        response = http_request(f"{server_url}/smp/step_3", "POST", payload = {
+        http_request(f"{server_url}/smp/step_3", "POST", payload = {
             "proof": our_message,
             "recipient": contact_id
         }, auth_token=auth_token)
-    except:
+    except Exception:
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
@@ -232,16 +231,11 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
 def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None:
     with user_data_lock:
-        server_url = user_data["server_url"]
-        auth_token = user_data["token"]
-
         answer = normalize_answer(user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"])
 
         our_public_key     = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]
         our_nonce          = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
         contact_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"], validate=True)
-
-        contact_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
     
     our_key_fingerprint = sha3_512(our_public_key)
 
@@ -323,8 +317,8 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
     smp_failure(user_data, user_data_lock, contact_id, ui_queue)
 
     try:
-        response = http_request(f"{server_url}/smp/failure", "POST", payload = {"recipient": contact_id}, auth_token=auth_token)
-    except:
+        http_request(f"{server_url}/smp/failure", "POST", payload = {"recipient": contact_id}, auth_token=auth_token)
+    except Exception:
         logger.error("Failed to send SMP failure to server, either you are offline or the server is down")
         pass
   

@@ -1,5 +1,4 @@
 import tkinter as tk
-from tkinter import messagebox
 from logic.storage import load_account_data
 from ui.utils import *
 

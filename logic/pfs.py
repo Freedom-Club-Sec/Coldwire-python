@@ -7,16 +7,12 @@ from core.crypto import (
     generate_sign_keys,
     random_number_range
 )
-from core.trad_crypto import derive_key_argon2id, sha3_512
+from core.trad_crypto import sha3_512
 from base64 import b64encode, b64decode
 import secrets
-import hmac
-import time
 import copy
 import json
 import logging
-import oqs
-
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +53,8 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
 
 
     try:
-        response = http_request(f"{server_url}/pfs/send_keys", "POST", payload=payload, auth_token=auth_token)
-    except:
+        http_request(f"{server_url}/pfs/send_keys", "POST", payload=payload, auth_token=auth_token)
+    except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our ephemeral keys to the server"})
         return
     
