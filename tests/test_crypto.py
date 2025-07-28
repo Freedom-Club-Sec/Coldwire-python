@@ -3,31 +3,46 @@
 Tests for ML-KEM-1024 (Kyber) and ML-DSA-87 (Dilithium5).
 Covers:
 - Key generation conformance to NIST spec
+- Dilithium Signature generation and verification
 - OTP encryption using Kyber key exchange
 - Hash chain tamper detection
 """
 
 import pytest
+import secrets
 from core.crypto import (
     generate_kem_keys,
     generate_sign_keys,
+    create_signature,
+    verify_signature,
     generate_kyber_shared_secrets,
     decrypt_kyber_shared_secrets,
     otp_encrypt_with_padding,
-    otp_decrypt_with_padding
+    otp_decrypt_with_padding,
+    random_number_range
 )
 from core.constants import (
     OTP_PADDING_LIMIT,
-    OTP_PADDING_LENGTH
+    OTP_PADDING_LENGTH,
+    ML_KEM_1024_SK_LEN,
+    ML_KEM_1024_PK_LEN,
+    ML_DSA_87_NAME,  
+    ML_DSA_87_SK_LEN,
+    ML_DSA_87_PK_LEN,
+    ML_DSA_87_SIGN_LEN
 )
 from core.trad_crypto import sha3_512
 
-# NIST-specified key sizes (bytes)
-ML_KEM_1024_SK_LEN = 3168
-ML_KEM_1024_PK_LEN = 1568
-ML_DSA_87_SK_LEN   = 4864
-ML_DSA_87_PK_LEN   = 2592
-HASH_SIZE          = 64     # SHA3-512 output size in bytes
+HASH_SIZE = 64     # SHA3-512 output size in bytes
+
+
+def test_random_number_range():
+    min_val, max_val = 100, 10000
+
+    # Check multiple values fall in range
+    for _ in range(10000):
+        num = random_number_range(min_val, max_val)
+        assert min_val <= num <= max_val, f"{num} out of range {min_val}-{max_val}"
 
 
 def test_mlkem_keygen_basic():
@@ -56,18 +71,47 @@ def test_mldsa_keygen_basic():
     seen_public_keys  = set()
 
     for _ in range(50):
-        private_key, public_key = generate_sign_keys(algorithm="Dilithium5")
+        private_key, public_key = generate_sign_keys(algorithm=ML_DSA_87_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
         assert public_key not in seen_public_keys,  "Duplicate public key detected"
 
-        assert private_key != public_key, "Private and public keys must differ"
+        assert private_key != public_key, "Private and public keys are identical"
         assert isinstance(private_key, bytes) and isinstance(public_key, bytes), "Keys must be bytes"
         assert len(private_key) == ML_DSA_87_SK_LEN, "Private key length mismatch with spec"
         assert len(public_key)  == ML_DSA_87_PK_LEN, "Public key length mismatch with spec"
 
         seen_private_keys.add(private_key)
         seen_public_keys.add(public_key)
+
+
+def test_signature_verifcation():
+    """Validate ML-DSA-87 signature creation and verification"""
+    private_key, public_key = generate_sign_keys(algorithm="Dilithium5")
+
+    assert private_key != public_key, "Private and public keys are identical"
+
+    message = "Hello, World!".encode("utf-8")
+    signature = create_signature(ML_DSA_87_NAME, message, private_key)
+
+    assert isinstance(signature, bytes), "Signature must be bytes"
+    assert len(signature) == ML_DSA_87_SIGN_LEN, "Signature length mismatch with spec"
+    
+    verify = verify_signature(ML_DSA_87_NAME, message, signature, public_key)
+
+    assert isinstance(verify, bool), "Verification result must be bool"
+    assert verify == True, "Verification failed"
+
+    message = "Hi, World!".encode()
+    verify = verify_signature(ML_DSA_87_NAME, message, signature, public_key)
+
+    assert isinstance(verify, bool), "Verification result must be bool"
+    assert verify == False, "Verification shouldn't have succeeded"
+
+
+
+
+
 
 
 def test_kem_otp_encryption():
