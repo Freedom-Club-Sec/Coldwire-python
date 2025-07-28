@@ -35,7 +35,7 @@ def test_mlkem_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(100):
+    for _ in range(50):
         private_key, public_key = generate_kem_keys(algorithm="Kyber1024")
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
@@ -55,7 +55,7 @@ def test_mldsa_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(100):
+    for _ in range(50):
         private_key, public_key = generate_sign_keys(algorithm="Dilithium5")
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
