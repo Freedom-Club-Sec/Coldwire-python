@@ -4,7 +4,7 @@
 ---
 **Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
 
-## 🔒 Security Model & 🌟 Key Features
+## 🔒 Security Model & Features
 - **Best‑case security**: achieves [unbreakable encryption](https://en.wikipedia.org/wiki/One-time_pad) under the principles of information theory using [one‑time pads](https://en.wikipedia.org/wiki/One-time_pad) 
 - **Worst‑case security**: falls back only to ML‑KEM‑1024 (Kyber) resistance  
 - **Perfect-Forward-Secrecy**: on every [OTP](https://en.wikipedia.org/wiki/One-time_pad) batch through ephemeral PQC key exchanges  
