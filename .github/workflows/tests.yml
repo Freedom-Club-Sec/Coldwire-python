@@ -22,17 +22,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt update
-
-          sudo apt install astyle cmake gcc ninja-build libssl-dev python3-pytest python3-pytest-xdist unzip xsltproc doxygen graphviz python3-yaml valgrind
-
-      - name: Download and build liboqs
-        run: |
-          git clone --depth=1 https://github.com/open-quantum-safe/liboqs
-          cmake -S liboqs -B liboqs/build -DBUILD_SHARED_LIBS=ON
-          cmake --build liboqs/build --parallel 8
-          cmake --build liboqs/build --target install
-          
-          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+          sudo apt install astyle cmake gcc ninja-build build-essential libssl-dev python3-pytest python3-pytest-xdist unzip xsltproc doxygen graphviz python3-yaml
 
       - name: Download and build and liboqs-python
         run: |
@@ -40,7 +30,7 @@ jobs:
           cd liboqs-python
           pip install .
           cd ..
-          rm -rf liboqs*
+          rm -rf liboqspython
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
