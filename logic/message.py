@@ -1,9 +1,32 @@
+"""
+logic/message.py
+-----------
+Message sending, receiving, and one-time-pad key exchange logic.
+Handles:
+- Generation and transmission of Kyber-encrypted OTP batches
+- Ephemeral key rotation enforcement for PFS
+- Message encryption/decryption with hash chain integrity checks
+- Incoming message processing and replay/tampering protection
+"""
+
 from core.requests import http_request
 from logic.storage import save_account_data
 from logic.pfs import send_new_ephemeral_keys
 from core.trad_crypto import sha3_512
-from core.crypto import *
-from core.constants import *
+from core.crypto import (
+    generate_kyber_shared_secrets,
+    decrypt_kyber_shared_secrets,
+    create_signature,
+    verify_signature,
+    otp_encrypt_with_padding,
+    otp_decrypt_with_padding
+)
+from core.constants import (
+    OTP_PADDING_LIMIT,
+    OTP_PADDING_LENGTH,
+    ML_KEM_1024_NAME,
+    ML_DSA_87_NAME,  
+)
 from base64 import b64decode, b64encode
 import copy
 import json
@@ -13,6 +36,12 @@ logger = logging.getLogger(__name__)
 
 
 def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue) -> bool:
+    """
+        Generates a new Kyber OTP batch, signs it with Dilithium, and sends it to the server.
+        Updates local pad and hash chain state upon success.
+        Returns:
+            bool: True if successful, False otherwise.
+    """
     with user_data_lock: 
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
@@ -23,7 +52,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     ciphertext_blob, pads = generate_kyber_shared_secrets(contact_kyber_public_key)
 
-    otp_batch_signature = create_signature("Dilithium5", ciphertext_blob, our_lt_private_key)
+    otp_batch_signature = create_signature(ML_DSA_87_NAME, ciphertext_blob, our_lt_private_key)
     otp_batch_signature = b64encode(otp_batch_signature).decode()
 
     payload = {
@@ -48,6 +77,16 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
 
 def send_message_processor(user_data, user_data_lock, contact_id: str, message: str, ui_queue) -> bool:
+    """
+    Encrypts and sends a message to the contact.
+    Handles:
+        - OTP pad consumption and regeneration
+        - Ephemeral key rotation
+        - Hash chain integrity
+        - Server transmission
+    Returns:
+        bool: True if successful, False otherwise.
+    """
     # We don't deepcopy here as real-time states are required here for maximum future-proofing.
 
     with user_data_lock:
@@ -189,7 +228,12 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
 
 
-def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message):
+def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dict, ui_queue, message: dict) -> None:
+    """
+    Handles incoming messages and OTP batches.
+    Verifies signatures, decrypts payloads, updates pads/hash chain, and forwards plaintext to UI.
+    Skips or logs suspicious or invalid messages.
+    """
     contact_id = message["sender"]
 
     if (not (contact_id in user_data_copied["contacts"])):
@@ -206,7 +250,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
     contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
 
     if not contact_public_key:
-        logger.warning("Contact per-contact Dilithium5 public key is missing.. skipping message")
+        logger.warning("Contact per-contact Dilithium 5 public key is missing.. skipping message")
         return
 
 
@@ -216,7 +260,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
         otp_hashchain_signature  = b64decode(message["otp_hashchain_signature"], validate=True)
         otp_hashchain_ciphertext = b64decode(message["otp_hashchain_ciphertext"], validate=True)
 
-        valid_signature = verify_signature("Dilithium5", otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
+        valid_signature = verify_signature(ML_DSA_87_NAME, otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
         if not valid_signature:
             logger.debug("Invalid OTP_hashchain_ciphertext signature.. possible MiTM ?")
             return
@@ -246,6 +290,7 @@ def messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue,
             contact_hash_chain = user_data["contacts"][contact_id]["contact_pads"]["hash_chain"]
 
         if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
+            # TODO: Maybe reset our local pads as well?
             logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
             return
 

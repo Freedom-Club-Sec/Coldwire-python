@@ -1,6 +1,6 @@
 # app metadata
 APP_NAME      = "Coldwire"
-APP_VERSION       = "0.1"
+APP_VERSION   = "0.1"
 
 # network defaults (seconds)
 LONGPOLL_MIN  = 5

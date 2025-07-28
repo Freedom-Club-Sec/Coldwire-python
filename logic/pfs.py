@@ -1,6 +1,12 @@
 from core.requests import http_request
 from logic.storage import save_account_data
-from core.crypto import generate_kem_keys, verify_signature, create_signature, generate_sign_keys, random_number_range
+from core.crypto import (
+    generate_kem_keys,
+    verify_signature,
+    create_signature,
+    generate_sign_keys,
+    random_number_range
+)
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 import secrets
