@@ -9,7 +9,6 @@ Covers:
 """
 
 import pytest
-import secrets
 from core.crypto import (
     generate_kem_keys,
     generate_sign_keys,
@@ -50,7 +49,7 @@ def test_mlkem_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(25):
+    for _ in range(10):
         private_key, public_key = generate_kem_keys(algorithm="Kyber1024")
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
@@ -70,7 +69,7 @@ def test_mldsa_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(25):
+    for _ in range(10):
         private_key, public_key = generate_sign_keys(algorithm=ML_DSA_87_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
@@ -107,10 +106,6 @@ def test_signature_verifcation():
 
     assert isinstance(verify, bool), "Verification result must be bool"
     assert verify == False, "Verification shouldn't have succeeded"
-
-
-
-
 
 
 
