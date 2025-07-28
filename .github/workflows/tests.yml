@@ -30,11 +30,11 @@ jobs:
           cd liboqs-python
           pip install .
           cd ..
-          rm -rf liboqspython
+          rm -rf liboqs-python
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
           pip install pytest
 
       - name: Run tests
-        run: pytest
+        run: PYTHONPATH=. pytest -v
