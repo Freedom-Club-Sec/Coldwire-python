@@ -84,7 +84,7 @@ class PasswordPrompt(tk.Toplevel):
 
         try:
             load_account_data(password)
-        except:
+        except Exception:
             self.set_status("Wrong password")
             return
 

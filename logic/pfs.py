@@ -4,7 +4,6 @@ from core.crypto import (
     generate_kem_keys,
     verify_signature,
     create_signature,
-    generate_sign_keys,
     random_number_range
 )
 from core.trad_crypto import sha3_512

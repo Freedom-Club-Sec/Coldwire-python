@@ -127,7 +127,7 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
     
     try:
-        response = http_request(f"{server_url}/smp/step_2", "POST", payload = {
+        http_request(f"{server_url}/smp/step_2", "POST", payload = {
             "proof": our_message,
             "nonce": b64encode(our_nonce).decode(),
             "public_key": b64encode(public_key).decode(),

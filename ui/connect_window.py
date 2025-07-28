@@ -171,7 +171,7 @@ class ServerConnectWindow(tk.Toplevel):
                 proxy_info["password"] = password
 
         if proxy_info:
-            logger.debug(f"Proxy used: %s", json.dumps(proxy_info, indent=2))
+            logger.info("Using proxy: %s", json.dumps(proxy_info, indent=2))
             return proxy_info
         
         logger.debug("No proxy was set")

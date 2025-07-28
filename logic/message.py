@@ -24,7 +24,6 @@ from core.crypto import (
 from core.constants import (
     OTP_PADDING_LIMIT,
     OTP_PADDING_LENGTH,
-    ML_KEM_1024_NAME,
     ML_DSA_87_NAME,  
 )
 from base64 import b64decode, b64encode

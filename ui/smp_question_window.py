@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from ui.utils import *
+# from ui.utils import *
 from logic.smp import smp_step_2_answer_provided
 
 class SMPQuestionWindow(tk.Toplevel):

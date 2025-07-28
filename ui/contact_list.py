@@ -46,7 +46,7 @@ class ContactListWindow(tk.Tk):
                 # this is a dry run, we don't actually populate the user data here
                 load_account_data(None)
                 call_the_callback = True
-            except:
+            except Exception:
                 # otherwise we prompt for unlock password
                 PasswordPrompt(self, self.ready_to_authenticate_callback)
 
