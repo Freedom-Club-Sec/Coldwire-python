@@ -1,140 +1,177 @@
-from core.constants import *
+"""
+core/crypto
+-----------
+Post-quantum cryptographic operations for Coldwire.
+
+Implements:
+- Key generation (ML-KEM-1024 / Kyber, ML-DSA-87 / Dilithium5)
+- Signature creation and verification
+- One-Time Pad (OTP) encryption with padding
+- Kyber-based OTP key exchange
+- Secure random number generation
+
+Notes:
+- Kyber keys and ciphertext sizes follow NIST spec for ML-KEM-1024.
+- Dilithium5 keys/signature sizes follow NIST spec for ML-DSA-87.
+- OTP padding randomizes message lengths to resist traffic analysis.
+"""
+
 import oqs
 import secrets
+from core.constants import (
+    OTP_PAD_SIZE,
+    OTP_PADDING_LIMIT,
+    OTP_PADDING_LENGTH,
+    ML_KEM_1024_NAME,
+    ML_KEM_1024_SK_LEN,
+    ML_KEM_1024_PK_LEN,
+    ML_DSA_87_NAME,
+    ML_DSA_87_SK_LEN,
+    ML_DSA_87_PK_LEN,
+    ML_DSA_87_SIGN_LEN
+)
 
 def create_signature(algorithm: str, message: bytes, private_key: bytes) -> bytes:
+    """
+    Creates a digital signature for a message using a post-quantum signature scheme.
+
+    Args:
+        algorithm: PQ signature algorithm (e.g. "Dilithium5").
+        message: Data to sign.
+        private_key: Private key bytes.
+
+    Returns:
+        Signature bytes of fixed size defined by the algorithm.
+    """
     with oqs.Signature(algorithm, secret_key=private_key) as signer:
-        return signer.sign(message) 
+        return signer.sign(message)
 
 def verify_signature(algorithm: str, message: bytes, signature: bytes, public_key: bytes) -> bool:
+    """
+    Verifies a post-quantum signature.
+
+    Args:
+        algorithm: PQ signature algorithm (e.g. "Dilithium5").
+        message: Original message data.
+        signature: Signature to verify.
+        public_key: Corresponding public key bytes.
+
+    Returns:
+        True if valid, False if invalid.
+    """
     with oqs.Signature(algorithm) as verifier:
         return verifier.verify(message, signature, public_key)
 
-def generate_sign_keys(algorithm: str = "Dilithium5"): 
+def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
+    """
+    Generates a new post-quantum signature keypair.
+
+    Args:
+        algorithm: PQ signature algorithm (default ML-DSA-87 / Dilithium5).
+
+    Returns:
+        (private_key, public_key) as bytes.
+    """
     with oqs.Signature(algorithm) as signer:
         public_key = signer.generate_keypair()
         private_key = signer.export_secret_key()
         return private_key, public_key
 
-
 def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -> bytes:
     """
-        Encrypts a plaintext with a one-time pad with padding.
+    Encrypts plaintext using a one-time pad with random padding.
 
-        - Always prefixes the plaintext with a OTP_PADDING_LENGTH big-endian length.
-        - Pads with random bytes up to padding_limit, if padding_limit is 0
-        - Then no padding is added
+    Process:
+    - Prefixes length of padding.
+    - Adds random padding (0..padding_limit bytes).
+    - XORs with one-time pad key.
 
-        Args:
-            plaintext: The plaintext message to encrypt.
-            key: The one-time pad. Must be at least as long as the plaintext block.
-            padding_limit: The padding limit
+    Args:
+        plaintext: Data to encrypt.
+        key: OTP key (≥ plaintext length + padding).
+        padding_limit: Max padding length.
 
-        Returns:
-            Ciphertext as bytes.
-
+    Returns:
+        Ciphertext bytes.
     """
-
     if padding_limit > ((2 ** (8 * OTP_PADDING_LENGTH)) - 1):
         raise ValueError("Padding too large")
 
-    # NOTE: If padding_limit is 0, the plaintext_paddding_bytes would also be 0
-    # Which means an attacker could potentially learn some info the first 2 bytes
-    # which consists of the padding_length. This is fine as OTP security guarantees
-    # as long as the rest of key is random and never reused, the security 
-    # wouldn't be affected at all.
-    #
-    # However, this could aid the adversary to confidently recover message length 
-    # as he now knows that the padding is 0 and hence could calculate the length 
-    # of the plaintext.
-    # This can be prevented if padding_limit is randomized even just slightly
-    # We leave that responsibility to the caller
-
     plaintext_padding = secrets.token_bytes(padding_limit)
     padding_length_bytes = len(plaintext_padding).to_bytes(OTP_PADDING_LENGTH, "big")
-
     padded_plaintext = padding_length_bytes + plaintext + plaintext_padding
-
     return one_time_pad(padded_plaintext, key)
-
-
 
 def otp_decrypt_with_padding(ciphertext: bytes, key: bytes) -> bytes:
     """
-        Decrypts a one-time-pad ciphertext that has been padded
+    Decrypts one-time pad ciphertext that contains prefixed padding length.
 
-        Args:
-            ciphertext: The padded ciphertext message to decrypt.
-            key: The one-time pad. Must be at least as long as the ciphertext block.
+    Args:
+        ciphertext: Ciphertext bytes.
+        key: OTP key (≥ ciphertext length).
 
-        Returns:
-            Plaintext as bytes.
-
+    Returns:
+        Original plaintext bytes without padding.
     """
-
     plaintext_with_padding = one_time_pad(ciphertext, key)
-
-    # Extract the plaintext length
-    padding_length = int.from_bytes(plaintext_with_padding[:OTP_PADDING_LENGTH], "big") 
-    
-    # Return the plaintext without the padding nor padding length
+    padding_length = int.from_bytes(plaintext_with_padding[:OTP_PADDING_LENGTH], "big")
     if padding_length != 0:
         return plaintext_with_padding[OTP_PADDING_LENGTH : -padding_length]
-
-    # Return the plaintext without padding_length. Needed because 
-    # if padding_length is 0, -padding_length would return an empty string
-
     return plaintext_with_padding[OTP_PADDING_LENGTH:]
-
-
 
 def one_time_pad(plaintext: bytes, key: bytes) -> bytes:
     """
-        Does one-time-pad XOR encryption on plaintext with key and returns result
+    XOR-based One-Time Pad encryption/decryption.
 
-        OTP is the only known encryption system that is mathematically proven to be unbreakable under the principles of information theory
-        if the key is random and is never reused
+    Args:
+        plaintext: Input data.
+        key: Random key (equal or longer length).
+
+    Returns:
+        XORed result (ciphertext or plaintext).
     """
     otpd_plaintext = b''
     for index, plain_byte in enumerate(plaintext):
         key_byte = key[index]
         otpd_plaintext += bytes([plain_byte ^ key_byte])
-
     return otpd_plaintext
 
+def generate_kem_keys(algorithm: str = ML_KEM_1024_NAME):
+    """
+    Generates ML-KEM-1024 keypair (Kyber).
 
+    Args:
+        algorithm: PQ KEM algorithm (default Kyber1024).
 
-def generate_kem_keys(algorithm: str = "Kyber1024"):
+    Returns:
+        (private_key, public_key) as bytes.
+    """
     with oqs.KeyEncapsulation(algorithm) as kem:
         public_key = kem.generate_keypair()
         private_key = kem.export_secret_key()
         return private_key, public_key
 
-
 def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
     """
-        Decapsulates shared_secrets of size otp_pad_size and returns the resulting shared_secrets.
-        The ciphertexts_blob is expected to be a concatenated sequence of Kyber ciphertexts,
-        originally generated by generate_kyber_shared_secrets and sent by the contact.
+    Decrypts concatenated Kyber ciphertexts to derive shared one-time pad.
 
-        The shared_secrets are meant to be used as one-time-pads to decrypt received messages.
+    Args:
+        ciphertext_blob: Concatenated Kyber ciphertexts.
+        private_key: ML-KEM-1024 private key.
+        otp_pad_size: Desired OTP pad size in bytes.
 
-        Kyber1024 has a defined fixed-size ciphertext of 1568 bytes each, which allows us to safely
-        split the blob and decapsulate in order.
+    Returns:
+        Shared secret OTP pad bytes.
     """
-
     cipher_size    = 1568  # Kyber1024 ciphertext size
-    
     shared_secrets = b''
     cursor         = 0
 
-    with oqs.KeyEncapsulation("Kyber1024", secret_key=private_key) as kem:
+    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
-
             if len(ciphertext) != cipher_size:
                 raise ValueError("Ciphertext blob is malformed or incomplete")
-
             shared_secret = kem.decap_secret(ciphertext)
             shared_secrets += shared_secret
             cursor += cipher_size
@@ -143,33 +180,35 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
 
 def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
     """
-        Generates shared_secrets of size otp_pad_size and returns both the ciphertext list-
-        and the generated shared_secrets.
-        The shared_secrets are meant to be used as one-time-pads to encypt our messages,
-        while the ciphertext is meant to be sent to the contact.
+    Generates a one-time pad via Kyber encapsulation.
 
+    Args:
+        public_key: Recipient's ML-KEM-1024 public key.
+        otp_pad_size: Desired OTP pad size in bytes.
 
-        Default desired One-time-pad size is set to 10 kilobytes which is meant to accommodate-
-        around 10 messages, assuming every message is 1024 bytes with the padding applied.
-
-
-        We concatenate the ciphertexts together safely because Kyper1024 has a defined fixed-size ciphertext-
-        of 1568 bytes each.
+    Returns:
+        (ciphertexts_blob, shared_secrets) for transport & encryption.
     """
-
     shared_secrets   = b''
     ciphertexts_blob = b''
 
-    with oqs.KeyEncapsulation("Kyber1024") as kem:
+    with oqs.KeyEncapsulation(ML_KEM_1024_NAME) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext, shared_secret = kem.encap_secret(public_key)
-
             ciphertexts_blob += ciphertext
             shared_secrets   += shared_secret
 
     return ciphertexts_blob, shared_secrets[:otp_pad_size]
 
-
 def random_number_range(a: int, b: int) -> int:
-    return secrets.randbelow(b - a + 1) + a
+    """
+    Generates a secure random integer in [a, b].
 
+    Args:
+        a: Minimum value.
+        b: Maximum value.
+
+    Returns:
+        Secure random integer between a and b inclusive.
+    """
+    return secrets.randbelow(b - a + 1) + a

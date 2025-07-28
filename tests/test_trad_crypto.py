@@ -18,7 +18,7 @@ def test_aes_encrypt_decrypt():
     password = b"Password123"
 
     # Derive AES-256 key using Argon2id
-    key, salt = derive_key_argon2id(password, output_length=32)
+    key, salt = derive_key_argon2id(password)
     assert key != salt, "Derived key should not equal derived salt"
     assert key != password, "Derived key should not match plaintext password"
 

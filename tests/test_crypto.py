@@ -23,6 +23,7 @@ from core.crypto import (
 from core.constants import (
     OTP_PADDING_LIMIT,
     OTP_PADDING_LENGTH,
+    ML_KEM_1024_NAME,
     ML_KEM_1024_SK_LEN,
     ML_KEM_1024_PK_LEN,
     ML_DSA_87_NAME,  
@@ -50,7 +51,7 @@ def test_mlkem_keygen_basic():
     seen_public_keys  = set()
 
     for _ in range(10):
-        private_key, public_key = generate_kem_keys(algorithm="Kyber1024")
+        private_key, public_key = generate_kem_keys(algorithm = ML_KEM_1024_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
         assert public_key not in seen_public_keys,  "Duplicate public key detected"

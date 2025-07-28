@@ -1,6 +1,6 @@
 # app metadata
-VERSION       = "0.1"
 APP_NAME      = "Coldwire"
+APP_VERSION       = "0.1"
 
 # network defaults (seconds)
 LONGPOLL_MIN  = 5
@@ -14,8 +14,10 @@ OTP_PADDING_LENGTH = 2
 OTP_PADDING_LIMIT  = 1024
 
 # NIST-specified key sizes (bytes) and metadata
+ML_KEM_1024_NAME   = "Kyber1024"
 ML_KEM_1024_SK_LEN = 3168
 ML_KEM_1024_PK_LEN = 1568
+
 
 ML_DSA_87_NAME     = "Dilithium5"  
 ML_DSA_87_SK_LEN   = 4864
