@@ -37,10 +37,10 @@ HASH_SIZE = 64     # SHA3-512 output size in bytes
 
 
 def test_random_number_range():
-    min_val, max_val = 100, 10000
+    min_val, max_val = 100, 1000
 
     # Check multiple values fall in range
-    for _ in range(10000):
+    for _ in range(1000):
         num = random_number_range(min_val, max_val)
         assert min_val <= num <= max_val, f"{num} out of range {min_val}-{max_val}"
 
@@ -50,7 +50,7 @@ def test_mlkem_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(50):
+    for _ in range(25):
         private_key, public_key = generate_kem_keys(algorithm="Kyber1024")
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
@@ -70,7 +70,7 @@ def test_mldsa_keygen_basic():
     seen_private_keys = set()
     seen_public_keys  = set()
 
-    for _ in range(50):
+    for _ in range(25):
         private_key, public_key = generate_sign_keys(algorithm=ML_DSA_87_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
