@@ -22,7 +22,7 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y git cmake ninja-build build-essential python3 gcc
 
-      - name: Build and install liboqs and Python bindings
+      - name: Build and install liboqs and its Python bindings
         run: |
           git clone --depth=1 https://github.com/open-quantum-safe/liboqs-python
           cd liboqs-python
