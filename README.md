@@ -18,4 +18,34 @@
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
 
 ## ⚠️ Disclaimer
-Coldwire is experimental. While it enforces paranoid‑level security features, the protocol and codebase are under active development. **Do not** use for production‑grade secrecy until a formal audit is complete.
+While Coldwire enforces paranoid‑level security features, the protocol, and codebase are under active development. 
+
+**Do not** use for production‑grade secrecy until an formal audit is complete.
+
+## Installation
+### Dependecies
+- liboqs-python
+- git
+- CMake
+- C compiler
+- Python 3
+  
+Install [liboqs-python](https://github.com/open-quantum-safe/liboqs-python/) by running:
+```sh
+git clone --depth=1 https://github.com/open-quantum-safe/liboqs-python
+cd liboqs-python
+pip install .
+```
+
+Clone Coldwire repositioary and install `requirements.txt` by running:
+```
+git clone https://github.com/Freedom-Club-FC/Coldwire
+cd Coldwire
+pip install -r requirements.txt
+```
+
+## Usage
+Run Coldwire's GUI using:
+```sh
+python3 main.py
+```
