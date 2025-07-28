@@ -20,11 +20,16 @@ jobs:
           python-version: '3.12'
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y git cmake ninja-build build-essential python3 gcc
+        run: sudo apt-get update && sudo apt-get install -y git cmake ninja-build build-essential python3 gcc curl
+
+      - name: Download libqs-python
+        run: |
+          curl -L https://github.com/open-quantum-safe/liboqs-python/archive/refs/tags/0.12.0.tar.gz -o liboqs-python.tar.gz
+          mkdir liboqs-python
+          tar -xzf liboqs-python.tar.gz --strip-components=1 -C liboqs-python
 
       - name: Build and install liboqs and its Python bindings
         run: |
-          git clone --depth=1 https://github.com/open-quantum-safe/liboqs-python
           cd liboqs-python
           pip install .
       - name: Install Python dependencies
