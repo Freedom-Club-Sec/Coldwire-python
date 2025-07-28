@@ -17,3 +17,5 @@
   - All untrusted inputs truncated to safe lengths to prevent buffer‑overflow in liboqs or Tk  
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
 
+## ⚠️ Disclaimer
+Coldwire is experimental. While it enforces paranoid‑level security features, the protocol and codebase are under active development. **Do not** use for production‑grade secrecy until a formal audit is complete.
