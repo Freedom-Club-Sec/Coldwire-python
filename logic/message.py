@@ -122,25 +122,25 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"]
 
 
+    # We rotate keys before generating and sending new batch of pads because
+    # ephemeral key exchanges always get processed before messages do.
+    # Which means if we generate and send pads with contact's, we would be using his old key, which would get overriden by the request, even if we send pads first
+    # This is because of our server archiecture which prioritizes PFS requests before messages.
+    # 
+    # Another note, that means after batch ends, and rotation time comes, you won't be able to send messages until other contact is online.
+    # This will (hopefully) change in a future update 
+    if rotation_counter == rotate_at:
+        logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
+        ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
+        send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
+
+        save_account_data(user_data, user_data_lock)
+        return False
+
+
     # If we have keys, but no one-time-pads, we send new pads to the contact
     if not our_pads:
         logger.debug("We have no pads to send message")
-
-
-        # We rotate keys before generating and sending new batch of pads because
-        # ephemeral key exchanges always get processed before messages do.
-        # Which means if we generate and send pads with contact's, we would be using his old key, which would get overriden by the request, even if we send pads first
-        # This is because of our server archiecture which prioritizes PFS requests before messages.
-        # 
-        # Another note, that means after batch ends, and rotation time comes, you won't be able to send messages until other contact is online.
-        # This will change in a future update 
-        if rotation_counter == rotate_at:
-            logger.info("We are rotating our ephemeral keys for contact (%s)", contact_id)
-            ui_queue.put({"type": "showinfo", "title": "Perfect Forward Secrecy", "message": f"We are rotating our ephemeral keys for contact ({contact_id[:32]})"})
-            send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
-
-            save_account_data(user_data, user_data_lock)
-            return False
 
         if not generate_and_send_pads(user_data, user_data_lock, contact_id, ui_queue):
             return False
