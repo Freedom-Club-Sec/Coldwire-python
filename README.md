@@ -15,6 +15,7 @@
   - Tkinter UI only, no embedded browsers or HTML
   - Minimal Python dependecies
   - All untrusted inputs truncated to safe lengths to prevent buffer‑overflow in liboqs or Tk  
+- **Traffic obfuscation**: Network adversaries (ISP, etc) cannot tell you are using Coldwire, because we utilize HTTP(s).
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
 
 ## ⚠️ Disclaimer
