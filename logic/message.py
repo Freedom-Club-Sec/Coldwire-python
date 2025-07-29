@@ -310,7 +310,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
         save_account_data(user_data, user_data_lock)
 
-        logger.info("Truncated pads and updated replay_protect_number for contact (%s)", contact_id)
+        logger.info("Truncated pads and updated computed the next hash chain for contact (%s)", contact_id)
 
         try:
             message_decoded = message_decrypted.decode("utf-8")
