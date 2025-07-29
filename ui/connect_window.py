@@ -2,6 +2,8 @@ from ui.utils import *
 from ui.password_window import PasswordWindow
 from logic.storage import save_account_data
 from logic.authentication import authenticate_account
+from core.requests import socks_monkey_patch, http_monkey_patch, undo_monkey_patching
+from logic.user import build_initial_user_data
 from core.crypto import generate_sign_keys
 from urllib.parse import urlparse
 import tkinter as tk
@@ -20,7 +22,6 @@ class ServerConnectWindow(tk.Toplevel):
         self.configure(bg="black")
         self.resizable(False, False)
 
-        # Server input
         self.label = tk.Label(self, text="Enter server URL:", fg="white", bg="black")
         self.label.pack(pady=(20, 5))
 
@@ -31,7 +32,6 @@ class ServerConnectWindow(tk.Toplevel):
 
         enhanced_entry(self.server_url, placeholder="I.e. example.com ...")
         
-        # Use Proxy 
         self.use_proxy_var = tk.IntVar()
         self.proxy_check = tk.Checkbutton(
             self,
@@ -46,18 +46,14 @@ class ServerConnectWindow(tk.Toplevel):
         )
         self.proxy_check.pack(pady=(10, 0), anchor="center")
 
-        # Proxy Fields Frame (hidden initially)
         self.proxy_fields_frame = tk.Frame(self, bg="black")
 
-        # Proxy row (type + address)
         self.proxy_row = tk.Frame(self.proxy_fields_frame, bg="black")
 
-        self.proxy_type_var = tk.StringVar(value="SOCKS5")
+        self.proxy_type_var = tk.StringVar(value="HTTP")
         self.proxy_type_var.trace_add("write", self.update_auth_visibility)
 
-        self.proxy_type_menu = tk.OptionMenu(
-            self.proxy_row, self.proxy_type_var, "HTTP", "SOCKS4", "SOCKS5"
-        )
+        self.proxy_type_menu = tk.OptionMenu(self.proxy_row, self.proxy_type_var, "HTTP", "SOCKS4", "SOCKS5")
         self.proxy_type_menu.config(bg="gray15", fg="white", highlightthickness=0, width=7)
         self.proxy_type_menu.pack(side="left", padx=(0, 5))
 
@@ -69,7 +65,6 @@ class ServerConnectWindow(tk.Toplevel):
 
         self.proxy_row.pack(pady=5)
 
-        # Auth row (username + password)
         self.auth_frame = tk.Frame(self.proxy_fields_frame, bg="black")
 
         self.proxy_user_entry = tk.Entry(
@@ -86,16 +81,15 @@ class ServerConnectWindow(tk.Toplevel):
 
         self.proxy_fields_frame.pack_forget()
 
-        # Status + Connect
         self.status_label = tk.Label(self, text="", fg="red", bg="black")
         self.status_label.pack(pady=5)
 
         self.connect_button = tk.Button(self, text="Connect", command=self.on_connect, bg="gray25", fg="white")
         self.connect_button.pack(pady=10)
 
-        # Shrink to fit default
+        # Shrink to fit default, autosize.
         self.update_idletasks()
-        self.geometry("")  # Autosize
+        self.geometry("")
 
     def toggle_proxy_fields(self):
         if self.use_proxy_var.get():
@@ -105,11 +99,11 @@ class ServerConnectWindow(tk.Toplevel):
             self.proxy_fields_frame.pack_forget()
 
         self.update_idletasks()
-        self.geometry("")  # Resize window
+        self.geometry("")  # Resize again
 
     def update_auth_visibility(self, *args):
-        proxy_type = self.proxy_type_var.get().lower()
-        if proxy_type in ["http", "socks5"]:
+        proxy_type = self.proxy_type_var.get()
+        if proxy_type in ["HTTP", "SOCKS5"]:
             self.auth_frame.pack(pady=5)
         else:
             self.auth_frame.pack_forget()
@@ -119,11 +113,14 @@ class ServerConnectWindow(tk.Toplevel):
 
 
     def password_callback(self, password):
-        # We save the password (if any) in the user data for ease of access to simplify development 
-        self.user_data = {"server_url": self.server_url_fixed, "password": password, "contacts": {}, "tmp": {}, "proxy_info": None}
+        # We save the password (if any) in the user data tmp dict for ease of access across codebase (i.e. saving) 
+        self.user_data = build_initial_user_data()
+        self.user_data["server_url"] = self.server_url_fixed
+        self.user_data["tmp"]["password"] = password
+
         proxy_info = self.get_proxy_info()
         if proxy_info:
-            self.user_data["proxy_info": proxy_info]
+            self.user_data["settings"]["proxy_info"] = proxy_info
 
         private_key, public_key = generate_sign_keys()
 
@@ -137,6 +134,22 @@ class ServerConnectWindow(tk.Toplevel):
         self.connect_to_server()
 
     def connect_to_server(self):
+        if self.user_data["settings"]["proxy_info"]:
+            if self.user_data["settings"]["proxy_info"]["type"] in ["SOCKS5", "SOCKS4"]:
+                try:
+                    import socks
+                except ImportError:
+                    logger.error("SOCKS proxy set and we could not find PySocks. WARNING before you install PySocks: PySocks is largely unmaintained. It's highly recommended you use proxychains instead")
+                    self.status_label.config(text="You need to install PySocks to enable SOCKS proxy support!")
+                    return
+
+                socks_monkey_patch(self.user_data["settings"]["proxy_info"])
+            else:
+                http_monkey_patch(self.user_data["settings"]["proxy_info"])
+        else:
+            undo_monkey_patching()
+
+
         try:
             self.user_data = authenticate_account(self.user_data)
         except ValueError as e:
@@ -145,30 +158,35 @@ class ServerConnectWindow(tk.Toplevel):
 
         save_account_data(self.user_data, self.master.user_data_lock)
         self.destroy()
-        self.master.ready_to_authenticate_callback(self.user_data["password"])
+        self.master.ready_to_authenticate_callback(self.user_data["tmp"]["password"], already_authenticated = True)
 
 
     def get_proxy_info(self):
         proxy_info = None
         if self.use_proxy_var.get():
-            proxy_type = self.proxy_type_var.get().lower()
-            proxy_addr = self.proxy_addr_entry.get().strip()
+            proxy_type = self.proxy_type_var.get()
+            proxy_addr = self.proxy_addr_entry.get().strip() 
+            username = self.proxy_user_entry.get().strip()
+            password = self.proxy_pass_entry.get().strip()
+
             if not proxy_addr or ':' not in proxy_addr:
                 self.status_label.config(text="Invalid proxy address.")
                 return
             host, port = proxy_addr.split(':', 1)
 
+            try:
+                port = int(port)
+            except ValueError:
+                self.status_label.config(text="Invalid proxy address port!")
+                return
+
             proxy_info = {
                 "type": proxy_type,
                 "host": host,
-                "port": int(port)
+                "port": port,
+                "username": username,
+                "password": password
             }
-
-            username = self.proxy_user_entry.get().strip()
-            password = self.proxy_pass_entry.get().strip()
-            if username and password:
-                proxy_info["username"] = username
-                proxy_info["password"] = password
 
         if proxy_info:
             logger.info("Using proxy: %s", json.dumps(proxy_info, indent=2))
@@ -207,4 +225,4 @@ class ServerConnectWindow(tk.Toplevel):
             PasswordWindow(self, self.password_callback)
         else:
             self.status_label.config(text="")
-            self.password_callback(self.user_data["password"])
+            self.password_callback(self.user_data["tmp"]["password"])

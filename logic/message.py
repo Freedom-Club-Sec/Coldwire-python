@@ -46,7 +46,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
  
         contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]
         our_lt_private_key       = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
-
+ 
 
     ciphertext_blob, pads = generate_kyber_shared_secrets(contact_kyber_public_key)
 
