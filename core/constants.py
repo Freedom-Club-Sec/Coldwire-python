@@ -24,6 +24,17 @@ ML_DSA_87_SK_LEN   = 4864
 ML_DSA_87_PK_LEN   = 2592
 ML_DSA_87_SIGN_LEN = 4595
 
+ML_BUFFER_LIMITS   = {
+    ML_KEM_1024_NAME: {
+        "SK_LEN": ML_KEM_1024_SK_LEN,
+        "PK_LEN": ML_KEM_1024_PK_LEN
+    },
+    ML_DSA_87_NAME: {
+        "SK_LEN": ML_DSA_87_SK_LEN,
+        "PK_LEN": ML_DSA_87_PK_LEN
+    }
+}
+
 # hash parameters
 ARGON2_MEMORY      = 256 * 1024   # KB
 ARGON2_ITERS       = 3

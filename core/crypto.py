@@ -27,8 +27,10 @@ from core.constants import (
     ML_DSA_87_NAME,
     ML_DSA_87_SK_LEN,
     ML_DSA_87_PK_LEN,
-    ML_DSA_87_SIGN_LEN
+    ML_DSA_87_SIGN_LEN,
+    ML_BUFFER_LIMITS
 )
+
 
 def create_signature(algorithm: str, message: bytes, private_key: bytes) -> bytes:
     """
@@ -42,7 +44,7 @@ def create_signature(algorithm: str, message: bytes, private_key: bytes) -> byte
     Returns:
         Signature bytes of fixed size defined by the algorithm.
     """
-    with oqs.Signature(algorithm, secret_key=private_key) as signer:
+    with oqs.Signature(algorithm, secret_key = private_key[:ML_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as signer:
         return signer.sign(message)
 
 def verify_signature(algorithm: str, message: bytes, signature: bytes, public_key: bytes) -> bool:
@@ -59,7 +61,7 @@ def verify_signature(algorithm: str, message: bytes, signature: bytes, public_ke
         True if valid, False if invalid.
     """
     with oqs.Signature(algorithm) as verifier:
-        return verifier.verify(message, signature, public_key)
+        return verifier.verify(message, signature, public_key[:ML_BUFFER_LIMITS[algorithm]["PK_LEN"]])
 
 def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
     """
@@ -166,7 +168,7 @@ def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp
     shared_secrets = b''
     cursor         = 0
 
-    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key) as kem:
+    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key[:ML_BUFFER_LIMITS[ML_KEM_1024_NAME]["SK_LEN"]]) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
             if len(ciphertext) != cipher_size:
@@ -193,7 +195,7 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD
 
     with oqs.KeyEncapsulation(ML_KEM_1024_NAME) as kem:
         while len(shared_secrets) < otp_pad_size:
-            ciphertext, shared_secret = kem.encap_secret(public_key)
+            ciphertext, shared_secret = kem.encap_secret(public_key[:ML_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"]])
             ciphertexts_blob += ciphertext
             shared_secrets   += shared_secret
 
