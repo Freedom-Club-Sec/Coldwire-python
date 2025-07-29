@@ -153,7 +153,7 @@ def test_kem_otp_encryption():
 
     # Tampering test: flip a byte
     tampered_message = bytearray(encrypted)
-    tampered_message[65] ^= 0xFF
+    tampered_message[HASH_SIZE + 1] ^= 0xFF
 
     tampered_decrypted = otp_decrypt_with_padding(bytes(tampered_message), plaintext[:len(encrypted)])
     tampered_hash      = tampered_decrypted[:HASH_SIZE]
