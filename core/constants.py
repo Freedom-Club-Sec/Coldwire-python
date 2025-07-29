@@ -30,8 +30,9 @@ ML_BUFFER_LIMITS   = {
         "PK_LEN": ML_KEM_1024_PK_LEN
     },
     ML_DSA_87_NAME: {
-        "SK_LEN": ML_DSA_87_SK_LEN,
-        "PK_LEN": ML_DSA_87_PK_LEN
+        "SK_LEN"  : ML_DSA_87_SK_LEN,
+        "PK_LEN"  : ML_DSA_87_PK_LEN,
+        "SIGN_LEN": ML_DSA_87_SIGN_LEN
     }
 }
 

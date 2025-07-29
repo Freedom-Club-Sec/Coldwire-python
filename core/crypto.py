@@ -61,7 +61,7 @@ def verify_signature(algorithm: str, message: bytes, signature: bytes, public_ke
         True if valid, False if invalid.
     """
     with oqs.Signature(algorithm) as verifier:
-        return verifier.verify(message, signature, public_key[:ML_BUFFER_LIMITS[algorithm]["PK_LEN"]])
+        return verifier.verify(message, signature[:ML_BUFFER_LIMITS[algorithm]["SIGN_LEN"]], public_key[:ML_BUFFER_LIMITS[algorithm]["PK_LEN"]])
 
 def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
     """
