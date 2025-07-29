@@ -7,10 +7,12 @@ from ui.add_contact_prompt import AddContactPrompt
 from ui.smp_setup_window import SMPSetupWindow
 from ui.smp_question_window import SMPQuestionWindow
 from ui.contact_nickname_prompt import ContactNicknamePrompt
+from ui.settings_window import SettingsWindow
 from logic.authentication import authenticate_account
 from logic.storage import check_account_file, save_account_data, load_account_data
 from logic.background_worker import background_worker
 from logic.utils import thread_failsafe_wrapper
+from core.requests import socks_monkey_patch, http_monkey_patch
 import tkinter as tk
 import sys
 import os
@@ -53,13 +55,20 @@ class ContactListWindow(tk.Tk):
             if call_the_callback:
                 self.ready_to_authenticate_callback(None)
 
-    def ready_to_authenticate_callback(self, password):
+    def ready_to_authenticate_callback(self, password, already_authenticated: bool = False):
         self.user_data = load_account_data(password)
-        try:
-            self.user_data = authenticate_account(self.user_data)
-        except ValueError as e:
-            messagebox.showerror("Error", e)
-            sys.exit(1)
+        if already_authenticated is False:
+            if self.user_data["settings"]["proxy_info"]:
+                if self.user_data["settings"]["proxy_info"]["type"] in ["SOCKS5", "SOCKS4"]:
+                    socks_monkey_patch(self.user_data["settings"]["proxy_info"])
+                else:
+                    http_monkey_patch(self.user_data["settings"]["proxy_info"])
+
+            try:
+                self.user_data = authenticate_account(self.user_data)
+            except ValueError as e:
+                messagebox.showerror("Error", e)
+                sys.exit(1)
 
 
         self.messages_store_tmp = {}
@@ -154,6 +163,7 @@ class ContactListWindow(tk.Tk):
         user_frame = tk.Frame(self, bg="black")
         user_frame.pack(pady=(10, 0))
 
+
         tk.Label(
             user_frame,
             text="Your ID: ",
@@ -173,6 +183,22 @@ class ContactListWindow(tk.Tk):
         username_label.pack(side="left")
         username_label.bind("<Button-1>", lambda e: self.copy_to_clipboard(username, "Your User ID has been copied to clipboard."))
 
+        settings_icon = PhotoImage(file=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets", "icons", "settings_icon.png")))
+        settings_button = tk.Button(
+            user_frame,
+            image=settings_icon,
+            command = lambda: SettingsWindow(self),
+            bg="black",
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            activebackground="black"
+        )
+        settings_button.image = settings_icon # Prevents garbage collection
+        settings_button.pack(side="left", padx=(0, 0))
+
+
+
         header_frame = tk.Frame(self, bg="black")
         header_frame.pack(pady=10)
 
@@ -189,7 +215,7 @@ class ContactListWindow(tk.Tk):
         add_button = tk.Button(
             header_frame,
             image=plus_icon,
-            command=self.open_add_contact_prompt,
+            command = lambda: AddContactPrompt(self),
             bg="black",
             relief="flat",
             bd=0,
@@ -231,10 +257,6 @@ class ContactListWindow(tk.Tk):
 
         # We initialize the background worker thread and other hooks here to prevent race conditions
         self.init_hooks_and_background_worker()
-
-    def on_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
 
     def new_contact(self, contact_id):
         with self.user_data_lock:
@@ -334,7 +356,5 @@ class ContactListWindow(tk.Tk):
        
         SMPSetupWindow(self, contact_id)
 
-    def open_add_contact_prompt(self):
-        AddContactPrompt(self)
 
 

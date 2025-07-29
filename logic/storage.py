@@ -16,7 +16,7 @@ def check_account_file() -> bool:
 
 def load_account_data(password = None) -> dict:
     user_data = None
-    if not password:
+    if password is None:
         with open(ACCOUNT_FILE_PATH, "r", encoding="utf-8") as f:
             user_data = json.load(f)
     else:
@@ -35,7 +35,8 @@ def load_account_data(password = None) -> dict:
 
     user_data["tmp"] = {
         "ephemeral_key_send_lock": {},
-        "pfs_do_not_inform": {}
+        "pfs_do_not_inform": {},
+        "password": password
     }
 
     
@@ -99,8 +100,8 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
     with user_data_lock:
         user_data = copy.deepcopy(user_data)
     
-    if password == None and "password" in user_data:
-        password = user_data["password"]
+    if (password is None) and (user_data["tmp"]["password"] is not None):
+        password = user_data["tmp"]["password"]
 
     del user_data["tmp"]
 
@@ -157,7 +158,7 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
 
 
 
-    if not password:
+    if password is None:
         with open(ACCOUNT_FILE_PATH, "w", encoding="utf-8") as f:
             json.dump(user_data, f, indent=2)
     else:

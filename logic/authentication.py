@@ -16,7 +16,7 @@ def authenticate_account(user_data: dict) -> dict:
         if not 'challenge' in response:
             raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
     except Exception:
-        if 'proxy_info' in user_data:
+        if user_data["settings"]["proxy_info"] is not None:
             raise ValueError("Could not connect to server! Are you sure your proxy settings are valid ?")
         else:
             raise ValueError("Could not connect to server! Are you sure the URL is valid ?")

@@ -1,6 +1,56 @@
 from urllib import request
 import json
 
+_ORIGINAL_SOCKET = None
+
+def socks_monkey_patch(proxy_info: dict = None):
+    import socks
+    import socket
+    
+    if proxy_info["username"] and proxy_info["password"]:
+        socks.set_default_proxy(
+            socks.SOCKS5 if proxy_info["type"] == "SOCKS5" else socks.SOCKS4,
+            proxy_info["host"], 
+            proxy_info["port"],
+            username=proxy_info["username"],
+            password=proxy_info["password"]
+        )
+    else:
+        socks.set_default_proxy(
+            socks.SOCKS5 if proxy_info["type"] == "SOCKS5" else socks.SOCKS4,
+            proxy_info["host"], 
+            proxy_info["port"],
+        )
+
+    _ORIGINAL_SOCKET = socket.socket  # save our socket before patching monkey patching socks
+    socket.socket = socks.socksocket 
+
+
+def http_monkey_patch(proxy_info: dict = None):
+    if proxy_info and proxy_info["type"] == "HTTP":
+        proxy_str = f"{proxy_info['host']}:{proxy_info['port']}"
+        if proxy_info["username"] and proxy_info["password"]:
+            proxy_str = f"{proxy_info['username']}:{proxy_info['password']}@{proxy_str}"
+
+        proxy_handler = request.ProxyHandler({
+            'http': 'http://' + proxy_str,
+            'https': 'http://' + proxy_str
+        })
+
+        opener = request.build_opener(proxy_handler)
+        request.install_opener(opener)
+
+
+def undo_monkey_patching():
+    # This undos the custom opener for urllib
+    request.install_opener(request.build_opener())
+    
+    # This tries to undo the monkey patching we did using Pysocks
+    if _ORIGINAL_SOCKET:
+        import socket
+        socket.socket = _ORIGINAL_SOCKET
+
+
 def http_request(url: str, method: str, auth_token: str = None, payload: dict = None, longpoll: int = -1) -> dict:
     if payload:
         payload = json.dumps(payload).encode()
