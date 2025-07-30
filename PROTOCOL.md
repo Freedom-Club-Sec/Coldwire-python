@@ -5,7 +5,7 @@ Version: Draft 1.0 (Work in Progress)
 Author: ChadSec (Freedom Club)
 
 ## 1. INTRODUCTION
-### 1.1. prologue
+### 1.1. Prologue
 
 Coldwire is a post-quantum secure communication protocol focused on:
 - Minimal metadata leakage
@@ -24,7 +24,7 @@ There are no persistent contact lists or user directories on the server, no conc
 
 Server only relays encrypted data between clients, deleting data after delivery. Data is only kept in an in-memory database (official implementation uses Redis).
 
-### 1.2. Terminology  & wording
+### 1.2. Terminology & Wording
 
 `Alice`: User initiating verification (User 1)
 
@@ -35,9 +35,11 @@ Server only relays encrypted data between clients, deleting data after delivery.
 `User`: The human end-user (not the software)
 `SMP`: Socialist Millionaire Problem
 
-## 2. CRYPTOGRAPHIC PRIMITIVES
+All requests payloads and responses are sent & received in `JSON` format, unless expliclity stated otherwise.
 
-### Authentication:
+## 2. Cryptographic Primitives
+
+### 2.1. Authentication:
 
 Long-term Identity Key: `ML-DSA-87` (`Dilithium5`) signature key pair
 
@@ -45,7 +47,7 @@ Per-contact Verification Keys: ML-DSA-87 key pair generated for each contact
 
 Identity Verification: Socialist Millionaire Problem (SMP) variant
 
-### Key Derivation & Proofs:
+### 2.2. Key Derivation & Proofs:
 
 Hash: `SHA3-512` (Note: we use `SHA3`, because `SHA3`'s Keccak sponge remains indifferentitable from a random oracle even under quantum attacks)
 
@@ -54,27 +56,27 @@ MAC: `HMAC-SHA3-512`
 Password-based KDF: `Argon2id` with `Memory_cost` set to `256MB`, `iterations` set to 3 and `salt_length` set to `32`.
 
 
-## 3. AUTHENTICATION FLOW
+## 3. Authentication Flow
 
-### Identity Key Generation
+### 3.1. Identity Key Generation
 
 `Client` generates a `ML-DSA-87` keypair locally (if he doesn't already have a keypair.)
 
 `Public key` and `user ID` used for authentication; private key stored securely on disk.
 
-### Registration / Login
+### Registration / Login (Authentication)
 
 Client sends 
 ```
 POST /authentication/init
 ``` 
-with JSON payload that consists of public key (and user_id if re-authenticating).
+with payload that consists of public key (and user_id if re-authenticating).
 
 Server responds with a base64-encoded random challenge.
 
 `Client` decodes challenge, signs it with his Dilithium private key.
 
-`Client` sends signature to POST /authentication/verify.
+`Client` sends signature to ```POST /authentication/verify```.
 
 Server verifies signature:
 
@@ -145,23 +147,26 @@ POST /smp/step_2
 
 ### 4.4. SMP STEP 3 (Alice → Bob)
 
-Alice computes expected proof_1 from Bob and verifies.
+`Alice` computes expected `proof_1` from Bob and verifies.
 
 If valid, computes proof for Bob's key:
-
+```python
 fpB = sha3_512(PK_B)
 message = rB + rA + fpB
 proof_2 = HMAC(secret, message, sha3_512)
-
+```
 Alice sends:
-
+```
 POST /smp/step_3
+```
+```json
 {
   "proof"       : hex(proof_2),
   "recipient_id": Bob's user_id
 }
+```
 
-5.4 SMP COMPLETION (Bob verifies Alice)
+### 4.5 SMP Completion (Bob verifies Alice)
 
 Bob computes expected proof_2 and verifies.
 
@@ -169,7 +174,7 @@ If valid: mutual key verification established.
 
 Both clients mark contact as verified locally.
 
-SECURITY NOTES
+### SMP Security notes
 
 Per-contact keypairs ensure compartmentalization of trust.
 
