@@ -428,14 +428,11 @@ Coldwire assumes:
 
 Future versions may:
 - Add group chat support
+- Hydrid traditional encryption alongside Post-quantum encryption
 - Improve support for offline messaging
 
 
 
 Our protocol is experimental. Coldwire is not meant to be the next Signal, or Matrix. Instead, we trade usability for security.
-
-We have a lot of ideas we want to implement, like Hybrid encryption, and group chats.
-When implemented, we will be updating this protocol spec. 
-
 
 
