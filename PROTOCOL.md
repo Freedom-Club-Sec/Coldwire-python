@@ -236,6 +236,7 @@ Perfect Forward Secrecy (PFS) ensure that if a ML-KEM-1024 keypair was compromis
 ### 5.1. Assumptions
 `Alice` wants to generate / rotate ephemeral `ML-KEM-1024` (`Kyber1024`) keys with `Bob`.
 `Alice` and `Bob` have verified each other's `per-contact` keys using `SMP`
+`Alice` is the initiator 
 
 ### 5.2. PFS Exchange
 `Alice` generates new ephemeral `ML-KEM-1024` keypair and signs them with her `per-contact` keys for `Bob`
@@ -280,12 +281,61 @@ Then `Bob` does the same as `Alice` did, generating his own `hash chain` seed if
 
 Now `Alice` and `Bob` both have each other ephemeral public keys, Have successfully rotated their ephemeral keys.
 
-### 5.3. Security notes
-We use `hash chain`s for replay protection.
-We also use `per-contact` keys for tampering and spoofing protection.
+### 5.3. PFS rotation counters
+`Alice` stores a `rotate_at` and `rotation_counter` variables alongside her ephemeral keys, locally.
+
+Those counters will be used in `6. Messages` to determine when it is time to rotate ephemeral keys.
+
+### 5.4. Security notes
+We use `hash chain`s for replay protection. 
+
+The reason we opted for a `hash chain` instead of a simple `replay_counter`, is to hide the crucial metadata of how many key rotations happened and in which order. This help us later on build plausible deniability
+
+We also use `per-contact` keys (`ML-DSA-87`) for tampering and spoofing detection & protection.
 
 
 ## 6. Messages
+Coldwire uses One-Time-Pads (OTP) for encrypting message content.
+Pads are shared using `PFS` ephemeral `Kyber1024` keys
+
+### 6.1. Assumptions
+`Alice` wants to send a 
+```python
+"Hello, World!"
+``` 
+message to `Bob`
+
+`Alice` and `Bob` are already `SMP` verified, and have exchanged their ephemeral keys
+
+### 6.2. Message prepartions
+Before `Alice` sends her message to `Bob`, she checks if `rotate_at` equals the `rotation_counter`, if positive, she first rotates her ephemeral keys with `Bob` (see `5. Perfect Forward Secrecy` for more details).
+
+If negative, she calculates if she has enough pads for the `message`, the `64 byte` `hash-chain`, `padding`, and `padding_length` headers, this is calculated like:
+```python
+OTP_PADDING_LIMIT  = 1024
+OTP_PADDING_LENGTH = 2
+
+message = "Hello, World!".encode("utf-8")
+
+next_hash_chain = sha3_512(last_hash_chain + message)
+
+message = next_hash_chain + message
+
+message_otp_padding_length = max(0, OTP_PADDING_LIMIT - OTP_PADDING_LENGTH - len(message))
+alice_pads = b"" # Empty
+
+# If length of our message, UTF-8 encoded, with OTP padding length is greater than our available pads 
+if len(message) + OTP_PADDING_LENGTH + message_otp_padding_length > len(alice_pads):
+    generate_pads()
+
+```
+
+`OTP_PADDING_LENGTH` is `2 bytes`, which can hold up to `65535 bytes` of `padding`.
+If `message` length is greater than `OTP_PADDING_LIMIT`, the message is not padded.
+
+Unlike in `5. Perfect Forward Secrecy`, our `hash_chain` here provides both replay protection *and* tampering protection 
+
+
 
 
 ## WORK-IN-PROGRESS
