@@ -52,13 +52,15 @@ Server only relays encrypted data between clients, deleting data after delivery.
 
 *All* requests payloads and responses are sent & received in `JSON` format, unless expliclity stated otherwise.
 
+*ALL* code displayed in this documented is purely pseudocode.
+
 ## 2. Cryptographic Primitives
 
 ### 2.1. Authentication:
 
 Long-term Identity Key: `ML-DSA-87` (`Dilithium5`) signature key pair
 
-Per-contact Verification Keys: `ML-DSA-87` key pair generated for each contact
+Per-contact Keys: `ML-DSA-87` key pair generated for each contact
 
 Identity Verification: Custom `Socialist Millionaire Problem` (`SMP`) human-language variant.
 
@@ -70,6 +72,21 @@ MAC: `HMAC-SHA3-512`
 
 Password-based KDF: `Argon2id` with `Memory_cost` set to `256MB`, `iterations` set to `3` and `salt_length` set to `32`.
 
+### 2.3. Perfect Forward Secrecy:
+
+Rotation key(s): Ephemeral `ML-KEM-1024` (`Kyber1024`) *Key Encapsulation Mechanism* (`KEM`) key pair
+
+Rotation key signing keys: Pre-contact keys (`ML-DSA-87`) to sign Ephemeral keys
+
+### 2.4. Symmetric algorithms
+`OTP` (One-Time-Pads): Used for encrypting messages
+
+`AES-256-GCM` (Advanced Encryption Standard with 256-bit key length operating in Galois/Counter mode): Used for encrypting & decrypting local storage. 
+
+### 2.5. Asymmetric algorithms
+`ML-DSA-87`: Used for authenticating to server and signing ephemeral `PFS` (Perfect Forward Secrecy) keys
+
+`ML-KEM-1024` Used as ephemeral `PFS` keys that are rotated
 
 ## 3. Authentication Flow
 
@@ -104,8 +121,8 @@ Server *verifies* signature:
 
 ## 4. SMP verification 
 
-ColdWire uses a human-language variant of *Socialist Millionaire Problem* (`SMP`) to verify per-contact keys.
-Server does not store any contact relationships; all verification state is local to the clients.
+ColdWire uses a human-language variant of *Socialist Millionaire Problem* (`SMP`) to verify `per-contact keys`.
+Server does not store any contact relationships, all verification state is local to the clients.
 
 
 ### 4.1. Assumptions:
@@ -133,7 +150,7 @@ POST /smp/initiate
 
 ### 4.3. SMP STEP 2 (Bob -> Alice)
 
-`Bob` generates per-contact `ML-DSA-8`7 key pair (`PK_B`, `SK_B`).
+`Bob` generates per-contact `ML-DSA-87` key pair (`PK_B`, `SK_B`).
 
 `Bob` reads question, inputs answer.
 
@@ -201,13 +218,74 @@ Verification security depends on entropy of the answer, `SMP` verification must 
 
 Server remains unaware of trust relationships. Server is not aware of verification success. Verification is end-to-end.
 
-The reason we use `per-contact keys` instead of our main identity keys is for **plausible deniability**, because `per-contact keys` are only exchanged *briefly*.
+The reason we use `per-contact keys` instead of our main identity keys is for **plausible unlinkability**, because `per-contact keys` are only exchanged *briefly*.
 
 Neither `Alice` nor `Bob` can prove each other's ownership defintively. 
 
-This **plausible deniability** only occurs if the server wasn't always malicious. (I.e. the server did not log `Alice` nor `Bob` requests containing their public_key).
+This **plausible unlinkability** only occurs if the server wasn't always malicious. (I.e. the server did not log `Alice` nor `Bob` requests containing their public_key).
 
-This **plausible deniability** only occurs if the server was compromised *After* SMP verification is complete.
+This **plausible unlinkability** only occurs if the server was compromised *After* SMP verification is complete.
+
+Additionally, this **plausible unlinkability** will be the basis on which we build **plausible deniability** later on with `OTP` pads and `PFS`.
+
+`SMP` verification, if done relatively quickly with an answer with sufficent entropy, provides an *unbreakable mathmatical guarantee of authenticity* and integrity for the verification of the keys (Assuming no hash collisions).
+
+## 5. Perfect Forward Secrecy
+Perfect Forward Secrecy (PFS) ensure that if a ML-KEM-1024 keypair was compromised, it does not affect keys before, and after it.  
+
+### 5.1. Assumptions
+`Alice` wants to generate / rotate ephemeral `ML-KEM-1024` (`Kyber1024`) keys with `Bob`.
+`Alice` and `Bob` have verified each other's `per-contact` keys using `SMP`
+
+### 5.2. PFS Exchange
+`Alice` generates new ephemeral `ML-KEM-1024` keypair and signs them with her `per-contact` keys for `Bob`
+
+`Alice` then checks if she already has a last `hash chain` state for `Bob`, if not, she generates new `hash chain` initial seed:
+```python
+hash_chain_seed  = random_bytes(32)
+```
+And saves it in her local state file.
+
+
+Afterwards, `Alice` computes the next hash in the chain:
+```python
+next_hash_chain = sha3_512(last_hash_chain_state) 
+```
+
+Then adds `next_hash_chain` to start of her `Kyber` public key
+```python
+kyber_publickey_hashchain = next_hash_chain + kyber_public_key
+```
+
+And then she signs the result with her `per-contact` (`Dilithium5`) key, and sends:
+```json
+[POST] /pfs/send_keys
+
+{
+    "kyber_publickey_hashchain": "kyber_publickey_hashchain base64 encoded",
+    "kyber_hashchain_signature": "the signature of kyber_publickey_hashchain base64 encoded",
+    "recipient": "Bob's user ID"
+}
+```
+
+`Bob` receives, base64 decodes, and verifies the signature, and if valid, he first checks if he has a last `hash chain` state for `Alice`, if not, he sets the first `64 bytes` of `kyber_publickey_hashchain` as the last `hash chain` state.
+
+If he already had a last `hash chain` state for `Alice`, he would compute it, and compare it with the hash chain `Alice` bundled in `kyber_publickey_hashchain`, and only proceeds if valid.
+
+`Bob` then saves `Alice`'s ephemeral `Kyber1024` public key by extracting `1568 bytes` starting after the first `64 bytes` of `kyber_publickey_hashchain`.
+
+Then `Bob` does the same as `Alice` did, generating his own `hash chain` seed if needed, generating new ephemeral `Kyber1024` keypair, and sending it back to `Alice`
+
+`Alice` then does the same verification steps `Bob` did, and saves his key.
+
+Now `Alice` and `Bob` both have each other ephemeral public keys, Have successfully rotated their ephemeral keys.
+
+### 5.3. Security notes
+We use `hash chain`s for replay protection.
+We also use `per-contact` keys for tampering and spoofing protection.
+
+
+## 6. Messages
 
 
 ## WORK-IN-PROGRESS
