@@ -8,34 +8,49 @@ Author: ChadSec (Freedom Club)
 ### 1.1. Prologue
 
 Coldwire is a post-quantum secure communication protocol focused on:
-- Minimal metadata leakage
-- 0-trust in server (server is just a dumb relay)
-- Messages & Keys plausible deniblity
-- Post-quantum future proofing
-- Design minimalism
+- Minimal metadata
+- *0-trust* in server (server is just a dumb relay, and is always assumed malicious)
+- Messages & Keys plausible deniblity 
+- Post-quantum future proofing (NIST Post-quantum algorithms with tier-5 security)
+- Design minimalism (few dependecies, simple UI)
+
 
 There are a **best** and **worst** case scenario for Coldwire's security:
-- **Best case security**: Provides unbreakable encryption, no matter how much compute power an adversary has, by utilizing One-time-Pads (OTP) encryption.
+- **Best case security**: Provides *unbreakable encryption*, no matter how much compute power an adversary has, by utilizing One-time-Pads (OTP) encryption.
 
 - **Worst case security**: Falls back to `ML-KEM-1024` (`Kyber1024`) security
 
+We depend on The Open-Quantum Safe Project for the implementation of the Post-Quantum (PQ) algorithms.
+
+We have chosen Python for our first `client` implementation for rapid development, and memory-safety. Additionally, this saves us from distributing binaries, which is a great thing security wise.
+
+What you see in the source code tree, is exactly what you get. No surpises.
+
+Additionally, we do extra effort to prevent 0-day exploits (memory-safety issues) in the underlying LibOQS and Tkinter libraries, by always truncating buffers to safe lengths before passing on to the libraries, we reduce the risk of buffer-overflows.
 
 There are no persistent contact lists or user directories on the server, no concept of friend requests server-side, no usernames, no avatars, no bio, IPs, no online status, no metadata.
 
-Server only relays encrypted data between clients, deleting data after delivery. Data is only kept in an in-memory database (official implementation uses Redis).
+Server only relays encrypted data between clients, deleting data after delivery. Data is only kept in an in-memory database (official server implementation uses Redis).
 
 ### 1.2. Terminology & Wording
 
-`Alice`: User initiating verification (User 1)
+`Alice`: Our user, or a hypothetical `User 1`
 
-`Bob`: Contact being verified (User 2)
+`Bob`: Our Contact, or a hypothetical `User 2`
 
 `Client`: The Coldwire client software (context-dependent, could refer to user or app)
 
 `User`: The human end-user (not the software)
+
 `SMP`: Socialist Millionaire Problem
 
-All requests payloads and responses are sent & received in `JSON` format, unless expliclity stated otherwise.
+`Dilithium`, `Dilithium5`: Interchangeably refers to `ML-DSA-87`
+
+`Kyber`, `Kyber1024`: Interchangeably refers to `ML-KEM-1024`
+
+`per-contact keys`: Refers to a keypair whose public key is **only sent once** to a contact in the `SMP` phase.
+
+*All* requests payloads and responses are sent & received in `JSON` format, unless expliclity stated otherwise.
 
 ## 2. Cryptographic Primitives
 
@@ -43,9 +58,9 @@ All requests payloads and responses are sent & received in `JSON` format, unless
 
 Long-term Identity Key: `ML-DSA-87` (`Dilithium5`) signature key pair
 
-Per-contact Verification Keys: ML-DSA-87 key pair generated for each contact
+Per-contact Verification Keys: `ML-DSA-87` key pair generated for each contact
 
-Identity Verification: Socialist Millionaire Problem (SMP) variant
+Identity Verification: Custom `Socialist Millionaire Problem` (`SMP`) human-language variant.
 
 ### 2.2. Key Derivation & Proofs:
 
@@ -53,7 +68,7 @@ Hash: `SHA3-512` (Note: we use `SHA3`, because `SHA3`'s Keccak sponge remains in
 
 MAC: `HMAC-SHA3-512`
 
-Password-based KDF: `Argon2id` with `Memory_cost` set to `256MB`, `iterations` set to 3 and `salt_length` set to `32`.
+Password-based KDF: `Argon2id` with `Memory_cost` set to `256MB`, `iterations` set to `3` and `salt_length` set to `32`.
 
 
 ## 3. Authentication Flow
@@ -70,31 +85,32 @@ Client sends
 ```
 POST /authentication/init
 ``` 
-with payload that consists of public key (and user_id if re-authenticating).
+with payload that consists of `user`'s base64-encoded public key (and `user_id` if re-authenticating).
 
 Server responds with a base64-encoded random challenge.
 
-`Client` decodes challenge, signs it with his Dilithium private key.
+`Client` decodes challenge, signs it with his `Dilithium` private key.
 
 `Client` sends signature to ```POST /authentication/verify```.
 
-Server verifies signature:
+Server *verifies* signature:
 
 **If valid & key exists**: returns JSON Web Token (JWT) with existing `user_id`.
 
 **If valid & key new**: generates new 16-byte random numeric `user_id`, and returns JWT.
 
-`Client` must include JWT in Authorization header for all subsequent requests.
+`Client` must include `JWT` token in Authorization header for all subsequent requests.
 
 
 ## 4. SMP verification 
 
-ColdWire uses a human-language variant of Socialist Millionaire Problem (SMP) to verify per-contact keys.
+ColdWire uses a human-language variant of *Socialist Millionaire Problem* (`SMP`) to verify per-contact keys.
 Server does not store any contact relationships; all verification state is local to the clients.
+
 
 ### 4.1. Assumptions:
 
-Alice wants to add Bob as a contact and verify authenticity of Bob's per-contact key.
+`Alice` wants to add `Bob` as a contact and verify authenticity of `Bob`'s per-contact key.
 
 ### 4.2. SMP Initiation (Alice → Bob)
 
@@ -141,7 +157,7 @@ POST /smp/step_2
   "proof"       : "proof_1 hex encoded",
   "nonce"       : "rB base64 encoded",
   "public_key"  : "PK_B base64 encoded",
-  "recipient_id": "Alice's 16 digits user_id"
+  "recipient_id": "Alice's 16 digits user ID"
 }
 ```
 
@@ -161,28 +177,38 @@ POST /smp/step_3
 ```
 ```json
 {
-  "proof"       : hex(proof_2),
-  "recipient_id": Bob's user_id
+  "proof"       : "proof_2 hex encoded",
+  "recipient_id": "Bob's 16 digits user ID"
 }
 ```
 
 ### 4.5 SMP Completion (Bob verifies Alice)
 
-Bob computes expected proof_2 and verifies.
+`Bob` computes expected `proof_2` and verifies.
 
-If valid: mutual key verification established.
+**If valid**: mutual key verification established.
 
-Both clients mark contact as verified locally.
+*Both* clients mark each others per-contact keys as verified locally.
+Now those keys serve as "root of trust" for Perfect Forward Secrecy (PFS) ephemeral keys exchanges.
 
-### SMP Security notes
+### 4.6. SMP Security notes
 
-Per-contact keypairs ensure compartmentalization of trust.
+Per-contact keypairs ensure compartmentalization of trust, we don't re-use our main authentication key for optimal cryptographic hygiene.
 
-Verification security depends on entropy of shared answer.
+Verification security depends on entropy of the answer, `SMP` verification must occur within a relatively short timeframe to avoid brute-force feasibility.
 
-SMP interaction must occur within short timeframe to avoid brute-force feasibility.
+`SMP` answer entropy doesn't have to be astronomically large, it just has to have enough entropy to be uncrackable for the duration of the `SMP` verification process.
 
-Server remains unaware of trust relationships; verification is end-to-end.
+Server remains unaware of trust relationships. Server is not aware of verification success. Verification is end-to-end.
+
+The reason we use `per-contact keys` instead of our main identity keys is for **plausible deniability**, because `per-contact keys` are only exchanged *briefly*.
+
+Neither `Alice` nor `Bob` can prove each other's ownership defintively. 
+
+This **plausible deniability** only occurs if the server wasn't always malicious. (I.e. the server did not log `Alice` nor `Bob` requests containing their public_key).
+
+This **plausible deniability** only occurs if the server was compromised *After* SMP verification is complete.
 
 
-
+## WORK-IN-PROGRESS
+We are working on writing more protocol sections
