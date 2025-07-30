@@ -6,6 +6,7 @@ _ORIGINAL_SOCKET = None
 def socks_monkey_patch(proxy_info: dict = None):
     import socks
     import socket
+    global _ORIGINAL_SOCKET
     
     if proxy_info["username"] and proxy_info["password"]:
         socks.set_default_proxy(

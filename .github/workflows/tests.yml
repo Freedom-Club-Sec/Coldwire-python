@@ -34,7 +34,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
-          pip install pytest coveralls pytest-cov
+          pip install pytest coveralls pytest-cov pysocks
 
       - name: Run tests
         run: PYTHONPATH=. pytest --cov=core --cov-report=xml
