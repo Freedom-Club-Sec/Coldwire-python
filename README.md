@@ -19,7 +19,7 @@
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
 
 ## ⚠️ Disclaimer
-While Coldwire enforces paranoid‑level security features, the protocol, and codebase are under active development. 
+While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-FC/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development. 
 
 **Do not** use for production‑grade secrecy until an formal audit is complete.
 
