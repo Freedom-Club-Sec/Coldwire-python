@@ -10,9 +10,9 @@ Author: ChadSec (Freedom Club)
 Coldwire is a post-quantum secure communication protocol focused on:
 - Minimal metadata
 - *0-trust* in server (server is just a dumb relay, and is always assumed malicious)
-- Messages & Keys plausible deniblity 
+- Messages & Keys plausible deniability 
 - Post-quantum future proofing (NIST Post-quantum algorithms with tier-5 security)
-- Design minimalism (few dependecies, simple UI)
+- Design minimalism (few dependencies, simple UI)
 
 
 There are a **best** and **worst** case scenario for Coldwire's security:
@@ -228,7 +228,7 @@ This **plausible unlinkability** only occurs if the server was compromised *Afte
 
 Additionally, this **plausible unlinkability** will be the basis on which we build **plausible deniability** later on with `OTP` pads and `PFS`.
 
-`SMP` verification, if done relatively quickly with an answer with sufficent entropy, provides an *unbreakable mathmatical guarantee of authenticity* and integrity for the verification of the keys (Assuming no hash collisions).
+`SMP` verification, if done relatively quickly with an answer with sufficent entropy, provides an *unbreakable mathematical guarantee of authenticity* and integrity for the verification of the keys (Assuming no hash collisions).
 
 ## 5. Perfect Forward Secrecy
 Perfect Forward Secrecy (PFS) ensure that if a ML-KEM-1024 keypair was compromised, it does not affect keys before, and after it.  
@@ -359,6 +359,83 @@ The ciphertext result of `Kyber1024` is signed using `per-contact` keys and is s
 `Bob` then saves both the pad and the `hash chain` seed locally as `Alice`'s.
 
 `Bob` will use that pad to decrypt future messages sent by `Alice`.
+
 `Bob` will also use that `hash chain` to verify messages were not tampered with, nor replayed.
+
+### 6.4. Message sending
+Now `Alice` have enough pads to send her messages, and `Bob` has enough pads to decrypt `Alice`'s messages.
+
+`Alice` then proceeds to pad & encrypt her message:
+```python
+padding = random_bytes(message_otp_padding_length)
+padding_len = len(padding).to_bytes(OTP_PADDING_LENGTH, "big") # Big endian
+padded_message = padding_len + message + padding 
+
+encrypted_message = otp_encrypt_func(padded_message, alice_pads[:len(padded_message)])
+```
+
+Now `Alice` can send her message to `Bob`:
+```json
+[POST] /messages/send_message
+{
+    "message_encrypted": "encrypted_message base64 encoded",
+    "recipient": "Bob's user ID"
+}
+```
+
+`Bob` receives, decrypts the message, reads size of padding by reading first `2 bytes` and discards the padding, verifies hash chain, and finally, if valid, `Bob` `client` displays the message.
+
+
+### 6.5. Security notes
+Even though we utilize OTP encryption, which is unbreakable if used right, we ultimately share the pads using `ML-KEM-1024` (`Kyber1024`). 
+
+The unbreakable property of OTPs is only true if the `Kyber1024` was not intercepted, if it were, the security becomes `Kyber1024` security.
+
+So, even in worst scenario where OTP security = `Kyber1024` security, our protocol still is arguebly more secure than other protocols that don't utilize OTPs.
+
+So best case scenario: Your messages could never be broken, no matter how much computing power your adversary has.
+
+Worst case scenario: OTP has inherited `Kyber1024` security. Now only compute-power-based security falls only on `Kyber1024`, if we compare that to a typical `Kyber1024` + `AES`, best case and worst case scenarios are equal, your security would be dependent on 2 complex algorithms, both with their own classes of cryptograhic attacks.
+
+So in our worst case scenario, our security still wins, by purely focusing on `Kyber1024` instead of an additional complex algorithm with it's very own massive classes of attacks.
+
+
+## Security Considerations & Threat Model
+Coldwire is designed for:
+- Post-quantum confidentiality and authentication.
+
+- Minimal metadata exposure (no timestamps, usernames, presence, contact lists, delivery logs, or message logging).
+
+- Perfect forward secrecy (PFS) via frequent key rotation and one-time pad session material.
+
+Coldwire does not attempt to defend against:
+
+- Traffic analysis at the network layer (timing correlation outside the server).
+
+- Compromise of endpoints (malware, key theft from device).
+
+- Server compromise during per-contact SMP verification (may weaken plausible deniability).
+
+- Attacks exploiting weak SMP shared secrets (low-entropy user-defined answers).
+
+Coldwire assumes:
+
+- The post-quantum primitives (`ML-KEM-1024`, `ML-DSA-87`) remain secure against both classical and quantum adversaries.
+
+- Open-Quantum Safe library correctly implements the post-quantum primitives.
+
+- Users securely verify per-contact keys before exchanging sensitive messages.
+
+Future versions may:
+- Add group chat support
+- Improve support for offline messaging
+
+
+
+Our protocol is experimental. Coldwire is not meant to be the next Signal, or Matrix. Instead, we trade usability for security.
+
+We have a lot of ideas we want to implement, like Hybrid encryption, and group chats.
+When implemented, we will be updating this protocol spec. 
+
 
 
