@@ -333,10 +333,32 @@ if len(message) + OTP_PADDING_LENGTH + message_otp_padding_length > len(alice_pa
 `OTP_PADDING_LENGTH` is `2 bytes`, which can hold up to `65535 bytes` of `padding`.
 If `message` length is greater than `OTP_PADDING_LIMIT`, the message is not padded.
 
-Unlike in `5. Perfect Forward Secrecy`, our `hash_chain` here provides both replay protection *and* tampering protection 
+Unlike in `5. Perfect Forward Secrecy`, our `hash_chain` here provides both replay protection *and* tampering protection. The reason we don't utilize the `per-contact` keys for signing the message, is to provide plausible deniability.
+
+Messages could been forged by `Bob`.
+
+### 6.3. OTP Pad Generation
+If in `6.2. Message Prepartions`, `Alice` did not have enough pads, she would need to generate and sends pads to `Bob`.
+
+`Alice` uses `Bob` ephemeral `Kyber1024` public-key to generate `OTP_PAD_SIZE bytes` of `shared secrets`. `OTP_PAD_SIZE` is default to `11264 bytes` (around 11 Kilobytes)
+
+Those `shared secrets` are now `Alice`'s OTP pads.
+
+The ciphertext result of `Kyber1024` is signed using `per-contact` keys and is sent to `Bob`:
+```json
+[POST] /messages/send_pads
+{
+    "otp_hashchain_ciphertext": "Base64 encoded Kyber1024 ciphertext",
+    "otp_hashchain_signature": "Base64 encoded signature of ciphertext",
+    "recipient": "Bob's user ID"
+}
+```
+
+`Bob` receives, and decapsulates the `shared secret`s, and treats the first `64 bytes` of the `shared secret`s as the `hash chain` initial seed.
+
+`Bob` then saves both the pad and the `hash chain` seed locally as `Alice`'s.
+
+`Bob` will use that pad to decrypt future messages sent by `Alice`.
+`Bob` will also use that `hash chain` to verify messages were not tampered with, nor replayed.
 
 
-
-
-## WORK-IN-PROGRESS
-We are working on writing more protocol sections
