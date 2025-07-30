@@ -1,130 +1,149 @@
-COLDWIRE PROTOCOL
+# COLDWIRE PROTOCOL
 
 Version: Draft 1.0 (Work in Progress)
+
 Author: ChadSec (Freedom Club)
 
-INTRODUCTION
+## 1. INTRODUCTION
+### 1.1. prologue
 
-ColdWire is a post-quantum secure communication protocol focused on:
+Coldwire is a post-quantum secure communication protocol focused on:
+- Minimal metadata leakage
+- 0-trust in server (server is just a dumb relay)
+- Messages & Keys plausible deniblity
+- Post-quantum future proofing
+- Design minimalism
 
-Minimal metadata leakage
+There are a **best** and **worst** case scenario for Coldwire's security:
+- **Best case security**: Provides unbreakable encryption, no matter how much compute power an adversary has, by utilizing One-time-Pads (OTP) encryption.
 
-Server as a dumb relay (no trust in server)
+- **Worst case security**: Falls back to `ML-KEM-1024` (`Kyber1024`) security
 
-Per-contact cryptographic verification
 
-No persistent contact lists or user directories on the server
+There are no persistent contact lists or user directories on the server, no concept of friend requests server-side, no usernames, no avatars, no bio, IPs, no online status, no metadata.
 
-No concept of friend requests server-side
+Server only relays encrypted data between clients, deleting data after delivery. Data is only kept in an in-memory database (official implementation uses Redis).
 
-Server only relays encrypted messages between clients, deleting data after delivery.
+### 1.2. Terminology  & wording
 
-CRYPTOGRAPHIC PRIMITIVES
+`Alice`: User initiating verification (User 1)
 
-Authentication:
+`Bob`: Contact being verified (User 2)
 
-Long-term Identity Key: ML-DSA-87 (Dilithium5) signature key pair
+`Client`: The Coldwire client software (context-dependent, could refer to user or app)
+
+`User`: The human end-user (not the software)
+`SMP`: Socialist Millionaire Problem
+
+## 2. CRYPTOGRAPHIC PRIMITIVES
+
+### Authentication:
+
+Long-term Identity Key: `ML-DSA-87` (`Dilithium5`) signature key pair
 
 Per-contact Verification Keys: ML-DSA-87 key pair generated for each contact
 
 Identity Verification: Socialist Millionaire Problem (SMP) variant
 
-Key Derivation & Proofs:
+### Key Derivation & Proofs:
 
-Hash: SHA3-512
+Hash: `SHA3-512` (Note: we use `SHA3`, because `SHA3`'s Keccak sponge remains indifferentitable from a random oracle even under quantum attacks)
 
-Password-based KDF: Argon2id
+MAC: `HMAC-SHA3-512`
 
-MAC: HMAC-SHA3-512
+Password-based KDF: `Argon2id` with `Memory_cost` set to `256MB`, `iterations` set to 3 and `salt_length` set to `32`.
 
-AUTHENTICATION FLOW
 
-Identity Key Generation
+## 3. AUTHENTICATION FLOW
 
-Client generates ML-DSA-87 key pair locally.
+### Identity Key Generation
 
-Public key and user ID used for authentication; private key stored securely on disk.
+`Client` generates a `ML-DSA-87` keypair locally (if he doesn't already have a keypair.)
 
-Registration / Login
+`Public key` and `user ID` used for authentication; private key stored securely on disk.
 
-Client sends POST /authentication/init with public key (and user_id if re-authenticating).
+### Registration / Login
+
+Client sends 
+```
+POST /authentication/init
+``` 
+with JSON payload that consists of public key (and user_id if re-authenticating).
 
 Server responds with a base64-encoded random challenge.
 
-Client decodes challenge, signs it with Dilithium private key.
+`Client` decodes challenge, signs it with his Dilithium private key.
 
-Client sends signature to POST /authentication/verify.
+`Client` sends signature to POST /authentication/verify.
 
 Server verifies signature:
 
-If valid & key exists: returns JSON Web Token (JWT) with existing user_id.
+**If valid & key exists**: returns JSON Web Token (JWT) with existing `user_id`.
 
-If valid & key new: generates new 16-byte random numeric user_id, returns JWT.
+**If valid & key new**: generates new 16-byte random numeric `user_id`, and returns JWT.
 
-Client must include JWT in Authorization header for all subsequent requests.
+`Client` must include JWT in Authorization header for all subsequent requests.
 
-TERMS
 
-Alice: User initiating verification (User 1)
-
-Bob: Contact being verified (User 2)
-
-Client: The Coldwire client software (context-dependent, could refer to user or app)
-
-User: The human end-user (not the software)
-
-CONTACT VERIFICATION (SMP VARIANT)
+## 4. SMP verification 
 
 ColdWire uses a human-language variant of Socialist Millionaire Problem (SMP) to verify per-contact keys.
 Server does not store any contact relationships; all verification state is local to the clients.
 
-Assumptions:
+### 4.1. Assumptions:
 
 Alice wants to add Bob as a contact and verify authenticity of Bob's per-contact key.
 
-5.1 SMP INITIATION (Alice → Bob)
+### 4.2. SMP Initiation (Alice → Bob)
 
 Alice generates per-contact ML-DSA-87 key pair (PK_A, SK_A). Stores SK_A locally.
 
 Alice composes human-language question & normalized answer.
 
 Alice sends:
-
+```
 POST /smp/initiate
+```
+```json
 {
   "question"    : "What cafe did we meet at last time?",
-  "nonce"       : base64(32 random bytes)  # rA
-  "public_key"  : base64(PK_A)
-  "recipient_id": Bob's user_id
+  "nonce"       : "32 random bytes that are base64 encoded", # rA
+  "public_key"  : "PK_A base64 encoded"
+  "recipient_id": "Bob's user ID"
 }
+```
 
-5.2 SMP STEP 2 (Bob → Alice)
+### 4.3. SMP STEP 2 (Bob to Alice)
 
-Bob generates per-contact ML-DSA-87 key pair (PK_B, SK_B).
+Bob generates per-contact `ML-DSA-8`7 key pair (`PK_B`, `SK_B`).
 
 Bob reads question, inputs answer.
 
 Computes shared secret:
-
+```python
 fpA = sha3_512(PK_A)
-rA  = Alice's nonce (decoded from base64)
+rA  = b"Alice's nonce (decoded from base64)"
 rB  = random_bytes(32)
 secret = normalize(answer)
 secret = argon2id(secret, sha3_512(rA + rB))
 message = rA + rB + fpA
 proof_1 = HMAC(secret, message, sha3_512)
+```
 
 Bob sends:
-
+```
 POST /smp/step_2
+```
+```json
 {
-  "proof"       : hex(proof_1),
-  "nonce"       : base64(rB),
-  "public_key"  : base64(PK_B),
-  "recipient_id": Alice's user_id
+  "proof"       : "proof_1 hex encoded",
+  "nonce"       : "rB base64 encoded",
+  "public_key"  : "PK_B base64 encoded",
+  "recipient_id": "Alice's 16 digits user_id"
 }
+```
 
-5.3 SMP STEP 3 (Alice → Bob)
+### 4.4. SMP STEP 3 (Alice → Bob)
 
 Alice computes expected proof_1 from Bob and verifies.
 
