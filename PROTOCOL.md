@@ -114,11 +114,11 @@ Server does not store any contact relationships; all verification state is local
 
 ### 4.2. SMP Initiation (Alice → Bob)
 
-Alice generates per-contact ML-DSA-87 key pair (PK_A, SK_A). Stores SK_A locally.
+`Alice` generates per-contact `ML-DSA-87` key pair (`PK_A`, `SK_A`). Stores `SK_A` locally.
 
-Alice composes human-language question & normalized answer.
+`Alice` composes human-language question & normalized answer.
 
-Alice sends:
+`Alice` sends:
 ```
 POST /smp/initiate
 ```
@@ -133,9 +133,9 @@ POST /smp/initiate
 
 ### 4.3. SMP STEP 2 (Bob to Alice)
 
-Bob generates per-contact `ML-DSA-8`7 key pair (`PK_B`, `SK_B`).
+`Bob` generates per-contact `ML-DSA-8`7 key pair (`PK_B`, `SK_B`).
 
-Bob reads question, inputs answer.
+`Bob` reads question, inputs answer.
 
 Computes shared secret:
 ```python
@@ -165,13 +165,13 @@ POST /smp/step_2
 
 `Alice` computes expected `proof_1` from Bob and verifies.
 
-If valid, computes proof for Bob's key:
+If valid, computes proof for `Bob`'s key:
 ```python
 fpB = sha3_512(PK_B)
 message = rB + rA + fpB
 proof_2 = HMAC(secret, message, sha3_512)
 ```
-Alice sends:
+`Alice` sends:
 ```
 POST /smp/step_3
 ```
