@@ -112,7 +112,7 @@ Server does not store any contact relationships; all verification state is local
 
 `Alice` wants to add `Bob` as a contact and verify authenticity of `Bob`'s per-contact key.
 
-### 4.2. SMP Initiation (Alice → Bob)
+### 4.2. SMP Initiation (Alice -> Bob)
 
 `Alice` generates per-contact `ML-DSA-87` key pair (`PK_A`, `SK_A`). Stores `SK_A` locally.
 
@@ -131,7 +131,7 @@ POST /smp/initiate
 }
 ```
 
-### 4.3. SMP STEP 2 (Bob to Alice)
+### 4.3. SMP STEP 2 (Bob -> Alice)
 
 `Bob` generates per-contact `ML-DSA-8`7 key pair (`PK_B`, `SK_B`).
 
@@ -161,7 +161,7 @@ POST /smp/step_2
 }
 ```
 
-### 4.4. SMP STEP 3 (Alice → Bob)
+### 4.4. SMP STEP 3 (Alice -> Bob)
 
 `Alice` computes expected `proof_1` from Bob and verifies.
 
