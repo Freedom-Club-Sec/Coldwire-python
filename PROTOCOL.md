@@ -100,7 +100,7 @@ Rotation key signing keys: Pre-contact keys (`ML-DSA-87`) to sign Ephemeral keys
 
 Client sends 
 ```
-POST /authentication/init
+[POST] /authentication/init
 ``` 
 with payload that consists of `user`'s base64-encoded public key (and `user_id` if re-authenticating).
 
@@ -108,7 +108,7 @@ Server responds with a base64-encoded random challenge.
 
 `Client` decodes challenge, signs it with his `Dilithium` private key.
 
-`Client` sends signature to ```POST /authentication/verify```.
+`Client` sends signature to ```[POST] /authentication/verify```.
 
 Server *verifies* signature:
 
@@ -136,10 +136,9 @@ Server does not store any contact relationships, all verification state is local
 `Alice` composes human-language question & normalized answer.
 
 `Alice` sends:
-```
-POST /smp/initiate
-```
 ```json
+[POST] /smp/initiate
+
 {
   "question"    : "What cafe did we meet at last time?",
   "nonce"       : "32 random bytes that are base64 encoded", # rA
@@ -166,10 +165,9 @@ proof_1 = HMAC(secret, message, sha3_512)
 ```
 
 Bob sends:
-```
-POST /smp/step_2
-```
 ```json
+[POST] /smp/step_2
+
 {
   "proof"       : "proof_1 hex encoded",
   "nonce"       : "rB base64 encoded",
@@ -189,10 +187,10 @@ message = rB + rA + fpB
 proof_2 = HMAC(secret, message, sha3_512)
 ```
 `Alice` sends:
-```
-POST /smp/step_3
-```
 ```json
+[POST] /smp/step_3
+
+
 {
   "proof"       : "proof_2 hex encoded",
   "recipient_id": "Bob's 16 digits user ID"
