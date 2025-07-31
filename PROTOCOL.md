@@ -235,8 +235,10 @@ Perfect Forward Secrecy (PFS) ensure that if a ML-KEM-1024 keypair was compromis
 
 ### 5.1. Assumptions
 `Alice` wants to generate / rotate ephemeral `ML-KEM-1024` (`Kyber1024`) keys with `Bob`.
+
 `Alice` and `Bob` have verified each other's `per-contact` keys using `SMP`
-`Alice` is the initiator 
+
+`Alice` is the `SMP` initiator. 
 
 ### 5.2. PFS Exchange
 `Alice` generates new ephemeral `ML-KEM-1024` keypair and signs them with her `per-contact` keys for `Bob`
@@ -391,14 +393,21 @@ Even though we utilize OTP encryption, which is unbreakable if used right, we ul
 
 The unbreakable property of OTPs is only true if the `Kyber1024` was not intercepted, if it were, the security becomes `Kyber1024` security.
 
-So, even in worst scenario where OTP security = `Kyber1024` security, our protocol still is arguebly more secure than other protocols that don't utilize OTPs.
+Even in worst scenario where `OTP` security = `Kyber1024` security, our protocol still is arguebly more secure than most other messaging protocols.
 
-So best case scenario: Your messages could never be broken, no matter how much computing power your adversary has.
+To summarize: 
 
-Worst case scenario: OTP has inherited `Kyber1024` security. Now only compute-power-based security falls only on `Kyber1024`, if we compare that to a typical `Kyber1024` + `AES`, best case and worst case scenarios are equal, your security would be dependent on 2 complex algorithms, both with their own classes of cryptograhic attacks.
+**Best case scenario**: Your messages could never be broken, no matter how much computing power your adversary has.
 
-So in our worst case scenario, our security still wins, by purely focusing on `Kyber1024` instead of an additional complex algorithm with it's very own massive classes of attacks.
+**Worst case scenario**: `OTP` has inherited `Kyber1024` security.
 
+If we compare the *worst case* scenario to a typical `Kyber` + `AES` scheme, our scheme would be arguably more secure because we rely only on **one** hard problem. If `Kyber` holds, everything is safe, if `Kyber` breaks, both scheme fail.
+
+With the `Kyber` + `AES` scheme, you've now doubled your dependecy, significantly increasing the attack-surface.
+
+So our `Kyber` + `OTP` can be thought of as just `Kyber` under *worst case* scenario. Which is still significantly better than most other encrypted protocols, because we now only trust a single-primitive.
+
+Additionally, `OTP` has no modes, no nonces, no padding quirks, no classes of attacks and bugs. Making it incredibly easy to implement in comparsion to `AES` which is fairly complex, and even when implemented per-spec, would still deliever argueably worse security than our `OTP` scheme.
 
 ## Security Considerations & Threat Model
 Coldwire is designed for:
@@ -428,11 +437,10 @@ Coldwire assumes:
 
 Future versions may:
 - Add group chat support
-- Hydrid traditional encryption alongside Post-quantum encryption
+- Hydrid traditional encryption alongside Post-Quantum encryption
 - Improve support for offline messaging
 
 
 
-Our protocol is experimental. Coldwire is not meant to be the next Signal, or Matrix. Instead, we trade usability for security.
-
+And lastly, our protocol is experimental, Coldwire is not meant to be the next Signal, or Matrix. Instead, we aim to be the most secure messenger available, even if it costs us some usability trades for security.
 
