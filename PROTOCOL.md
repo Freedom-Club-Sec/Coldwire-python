@@ -286,6 +286,8 @@ Now `Alice` and `Bob` both have each other ephemeral public keys, Have successfu
 ### 5.3. PFS rotation counters
 `Alice` stores a `rotate_at` and `rotation_counter` variables alongside her ephemeral keys, locally.
 
+`rotation_counter` and `rotate_at` are reset whenever `PFS` keys rotate.
+
 Those counters will be used in `6. Messages` to determine when it is time to rotate ephemeral keys.
 
 ### 5.4. Security notes
@@ -341,6 +343,8 @@ Messages could been forged by `Bob`.
 
 ### 6.3. OTP Pad Generation
 If in `6.2. Message Prepartions`, `Alice` did not have enough pads, she would need to generate and sends pads to `Bob`.
+
+`Alice` increments her `rotation_counter` local variable.
 
 `Alice` uses `Bob` ephemeral `Kyber1024` public-key to generate `OTP_PAD_SIZE bytes` of `shared secrets`. `OTP_PAD_SIZE` is default to `11264 bytes` (around 11 Kilobytes)
 
