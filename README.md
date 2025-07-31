@@ -1,5 +1,5 @@
 # Coldwire - The Ultra‑Paranoid Post‑Quantum Messenger
-![Tests](https://github.com/Freedom-Club-FC/Coldwire/actions/workflows/tests.yml/badge.svg)  ![Coverage](https://coveralls.io/repos/github/Freedom-Club-FC/Coldwire/badge.svg?branch=main)  [![Codacy Badge](https://app.codacy.com/project/badge/Grade/3f378d152ff24f2f93c9d93928f91ee2)](https://app.codacy.com/gh/Freedom-Club-FC/Coldwire/dashboard)
+![Tests](https://github.com/Freedom-Club-Sec/Coldwire/actions/workflows/tests.yml/badge.svg)  ![Coverage](https://coveralls.io/repos/github/Freedom-Club-Sec/Coldwire/badge.svg?branch=main)  [![Codacy Badge](https://app.codacy.com/project/badge/Grade/3f378d152ff24f2f93c9d93928f91ee2)](https://app.codacy.com/gh/Freedom-Club-Sec/Coldwire/dashboard)
 
 ---
 **Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
@@ -19,7 +19,7 @@
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
 
 ## ⚠️ Disclaimer
-While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-FC/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development. 
+While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-Sec/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development. 
 
 **Do not** use for production‑grade secrecy until an formal audit is complete.
 
@@ -40,7 +40,7 @@ pip install .
 
 Clone Coldwire repositioary and install `requirements.txt` by running:
 ```
-git clone https://github.com/Freedom-Club-FC/Coldwire
+git clone https://github.com/Freedom-Club-Sec/Coldwire
 cd Coldwire
 pip install -r requirements.txt
 ```
