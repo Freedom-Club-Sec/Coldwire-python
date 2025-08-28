@@ -14,8 +14,8 @@ from core.crypto import (
     generate_sign_keys,
     create_signature,
     verify_signature,
-    generate_kyber_shared_secrets,
-    decrypt_kyber_shared_secrets,
+    generate_shared_secrets,
+    decrypt_shared_secrets,
     otp_encrypt_with_padding,
     otp_decrypt_with_padding,
     random_number_range
@@ -51,7 +51,7 @@ def test_mlkem_keygen_basic():
     seen_public_keys  = set()
 
     for _ in range(10):
-        private_key, public_key = generate_kem_keys(algorithm = ML_KEM_1024_NAME)
+        private_key, public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
         assert public_key not in seen_public_keys,  "Duplicate public key detected"
@@ -119,14 +119,14 @@ def test_kem_otp_encryption():
     bob_private_key, bob_public_key = generate_kem_keys()
 
     # Bob derives shared pads from Alice's public key
-    ciphertext, bob_pads = generate_kyber_shared_secrets(alice_public_key)
+    ciphertext, bob_pads = generate_shared_secrets(alice_public_key, ML_KEM_1024_NAME)
     assert ciphertext != bob_pads, "Ciphertext equals pads (should differ)"
 
     # First 64 bytes are hash chain seed
     bob_hash_chain_seed = bob_pads[:HASH_SIZE]
 
     # Alice decrypts ciphertext to recover shared pads
-    plaintext = decrypt_kyber_shared_secrets(ciphertext, alice_private_key)
+    plaintext = decrypt_shared_secrets(ciphertext, alice_private_key, ML_KEM_1024_NAME)
     assert plaintext == bob_pads, "Pads mismatch after decryption"
 
     # Bob encrypts a message using OTP with hash chain
