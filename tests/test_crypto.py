@@ -113,10 +113,10 @@ def test_signature_verifcation():
 def test_kem_otp_encryption():
     """Full Kyber OTP exchange and tamper detection test."""
     # Alice creates ephemeral ML-KEM-1024 keypair for PFS
-    alice_private_key, alice_public_key = generate_kem_keys()
+    alice_private_key, alice_public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
     # Bob creates his own ephemeral keypair
-    bob_private_key, bob_public_key = generate_kem_keys()
+    bob_private_key, bob_public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
     # Bob derives shared pads from Alice's public key
     ciphertext, bob_pads = generate_shared_secrets(alice_public_key, ML_KEM_1024_NAME)
