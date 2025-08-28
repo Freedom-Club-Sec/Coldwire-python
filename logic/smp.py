@@ -263,15 +263,10 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     smp_success(user_data, user_data_lock, contact_id, ui_queue)
 
-    with user_data_lock:
-        #  = True to make it easy to remove contact_id later 
-        user_data["tmp"]["pfs_do_not_inform"][contact_id] = True
 
     # Attempt to automatically exchanger per-contact and ephemeral keys
-    # We only attempt here and not inside of smp_success because we don't want both contact's attempting to exchange keys at the same time
-    #
-    # NOTE: Maybe we need a delay here to ensure if a failure occured in contact's step 3, we catch it and mark 
-    # the contact as unverified despite verifiying him ?
+    # We only attempt here and not inside of smp_success because we don't want both contact's attempting to exchange keys at the same time 
+    # cuz contact likely still hasnt verified us yet.. (ik its confuysing but just pretend u understand)
     #
     
     send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)

@@ -28,7 +28,7 @@ from core.constants import (
     ML_DSA_87_SK_LEN,
     ML_DSA_87_PK_LEN,
     ML_DSA_87_SIGN_LEN,
-    ML_BUFFER_LIMITS
+    ALGOS_BUFFER_LIMITS
 )
 
 
@@ -44,7 +44,7 @@ def create_signature(algorithm: str, message: bytes, private_key: bytes) -> byte
     Returns:
         Signature bytes of fixed size defined by the algorithm.
     """
-    with oqs.Signature(algorithm, secret_key = private_key[:ML_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as signer:
+    with oqs.Signature(algorithm, secret_key = private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as signer:
         return signer.sign(message)
 
 def verify_signature(algorithm: str, message: bytes, signature: bytes, public_key: bytes) -> bool:
@@ -61,7 +61,7 @@ def verify_signature(algorithm: str, message: bytes, signature: bytes, public_ke
         True if valid, False if invalid.
     """
     with oqs.Signature(algorithm) as verifier:
-        return verifier.verify(message, signature[:ML_BUFFER_LIMITS[algorithm]["SIGN_LEN"]], public_key[:ML_BUFFER_LIMITS[algorithm]["PK_LEN"]])
+        return verifier.verify(message, signature[:ALGOS_BUFFER_LIMITS[algorithm]["SIGN_LEN"]], public_key[:ALGOS_BUFFER_LIMITS[algorithm]["PK_LEN"]])
 
 def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
     """
@@ -137,9 +137,9 @@ def one_time_pad(plaintext: bytes, key: bytes) -> bytes:
         otpd_plaintext += bytes([plain_byte ^ key_byte])
     return otpd_plaintext
 
-def generate_kem_keys(algorithm: str = ML_KEM_1024_NAME):
+def generate_kem_keys(algorithm: str):
     """
-    Generates ML-KEM-1024 keypair (Kyber).
+    Generates a KEM keypair.
 
     Args:
         algorithm: PQ KEM algorithm (default Kyber1024).
@@ -152,39 +152,42 @@ def generate_kem_keys(algorithm: str = ML_KEM_1024_NAME):
         private_key = kem.export_secret_key()
         return private_key, public_key
 
-def decrypt_kyber_shared_secrets(ciphertext_blob: bytes, private_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
+def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
     """
-    Decrypts concatenated Kyber ciphertexts to derive shared one-time pad.
+    Decrypts concatenated KEM ciphertexts to derive shared one-time pad.
 
     Args:
         ciphertext_blob: Concatenated Kyber ciphertexts.
-        private_key: ML-KEM-1024 private key.
+        private_key: KEM private key.
+        algorithm: KEM algorithm NIST name.
         otp_pad_size: Desired OTP pad size in bytes.
 
     Returns:
         Shared secret OTP pad bytes.
     """
-    cipher_size    = 1568  # Kyber1024 ciphertext size
+    cipher_size    = ALGOS_BUFFER_LIMITS[algorithm]["CT_LEN"]  # KEM ciphertext size
     shared_secrets = b''
     cursor         = 0
 
-    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key[:ML_BUFFER_LIMITS[ML_KEM_1024_NAME]["SK_LEN"]]) as kem:
+    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
             if len(ciphertext) != cipher_size:
-                raise ValueError("Ciphertext blob is malformed or incomplete")
+                raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete")
+
             shared_secret = kem.decap_secret(ciphertext)
             shared_secrets += shared_secret
             cursor += cipher_size
 
     return shared_secrets[:otp_pad_size]
 
-def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD_SIZE):
+def generate_shared_secrets(public_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
     """
-    Generates a one-time pad via Kyber encapsulation.
+    Generates a one-time pad via `algorithm` encapsulation.
 
     Args:
-        public_key: Recipient's ML-KEM-1024 public key.
+        public_key: Recipient's public key.
+        algorithm: KEM algorithm NIST name.
         otp_pad_size: Desired OTP pad size in bytes.
 
     Returns:
@@ -193,9 +196,9 @@ def generate_kyber_shared_secrets(public_key: bytes, otp_pad_size: int = OTP_PAD
     shared_secrets   = b''
     ciphertexts_blob = b''
 
-    with oqs.KeyEncapsulation(ML_KEM_1024_NAME) as kem:
+    with oqs.KeyEncapsulation(algorithm) as kem:
         while len(shared_secrets) < otp_pad_size:
-            ciphertext, shared_secret = kem.encap_secret(public_key[:ML_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"]])
+            ciphertext, shared_secret = kem.encap_secret(public_key[:ALGOS_BUFFER_LIMITS[algorithm]["PK_LEN"]])
             ciphertexts_blob += ciphertext
             shared_secrets   += shared_secret
 

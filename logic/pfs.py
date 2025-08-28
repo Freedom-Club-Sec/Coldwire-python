@@ -6,6 +6,10 @@ from core.crypto import (
     create_signature,
     random_number_range
 )
+from core.constants import (
+    ML_KEM_1024_NAME,
+    CLASSIC_MCELIECE_8_F_NAME,
+)
 from core.trad_crypto import sha3_512
 from base64 import b64encode, b64decode
 import secrets
@@ -39,7 +43,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
         our_hash_chain = sha3_512(our_hash_chain)
 
     # Generate new Kyber1024 keys for us
-    kyber_private_key, kyber_public_key = generate_kem_keys()
+    kyber_private_key, kyber_public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
     # Sign them with our per-contact long-term private key
     kyber_key_hashchain_signature = create_signature("Dilithium5", our_hash_chain + kyber_public_key, lt_sign_private_key)
@@ -60,24 +64,37 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
 
     # We update at the very end to ensure if any of previous steps fail, we do not desync our state
     with user_data_lock:
-        user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"] = kyber_private_key
-        user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["public_key"] = kyber_public_key
 
-
-        # This one should prevent any pad generation and sending, until contact sends us his new ephemeral keys too
-        # user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]      = None
-
+        user_data["tmp"]["new_ml_kem_keys"][contact_id] = {
+                "private_key": kyber_private_key,
+                "public_key": kyber_public_key
+            }
 
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = our_hash_chain
 
         # Set rotation counters to rotate every 2 pad batches sent
         # TODO: Maybe rotate on every batch instead? and rework the counters, like we don't even need counters if we rotate on every batch sent.
-        user_data["contacts"][contact_id]["ephemeral_keys"]["rotation_counter"] = 0
-        user_data["contacts"][contact_id]["ephemeral_keys"]["rotate_at"] = 2
+        # ANOTHER NOTE: Uhhh, why we doing this with mceliece in here??? Just fucking move it
+        user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] = 0
+        user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"] = 2
 
-        # = True, to make it easy for us to delete it later when we receive keys from contact
-        user_data["tmp"]["ephemeral_key_send_lock"][contact_id] = True
 
+
+
+def update_ephemeral_keys(user_data, user_data_lock) -> None:
+    with user_data_lock:
+        new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
+
+    for contact_id, v in new_ml_kem_keys.items():
+        with user_data_lock:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = v["private_key"]
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = v["public_key"]
+
+    if len(new_ml_kem_keys) != 0:
+        with user_data_lock:
+            user_data["tmp"]["new_ml_kem_keys"] = {}
+
+        save_account_data(user_data, user_data_lock)
 
 
 
@@ -85,7 +102,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
 def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message) -> None:
     contact_id = message["sender"]
 
-    if (not (contact_id in user_data_copied["contacts"])):
+    if contact_id not in user_data_copied["contacts"]:
         logger.error("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this PFS request for now")
         logger.debug("Our saved contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
         return
@@ -99,7 +116,7 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         return 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-        logger.error("Contact long-term signing key is not verified! it is possible that this is a MiTM attack by the server, we ignoring this PFS for now.")
+        logger.error("Contact long-term signing key is not verified! it is possible that this is a MiTM attack, we ignoring this PFS for now.")
         return
 
     contact_kyber_hashchain_signature = b64decode(message["kyber_hashchain_signature"], validate=True)
@@ -129,38 +146,14 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
 
     with user_data_lock:
         user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
-        user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = contact_kyber_public_key
+        user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = contact_kyber_public_key
 
+        our_kyber_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
 
-    # TODO: Investigate possible infinite loopback
-    # Details: What if contact_id wasn't in tmp (i.e. user closed the app and re-opened later )
-    # then we re-send the keys ?! And not only that, if the contact also offline, and he receive it
-    # he will also resend keys
-    # and if we are offline, we also resend keys.
-    # so on and so fourth
-    # Maybe ephemeral_key_send_lock need to be in the contact info, not in tmp ?
-
-    if contact_id in user_data_copied["tmp"]["ephemeral_key_send_lock"]:
-        logger.debug("We don't have to re-send keys, as we already have sent them, time to inform user of success :)")
-
-        # Incase this was auto-fired by SMP's step 4, we don't want to give the user another popup
-        if not (contact_id in user_data_copied["tmp"]["pfs_do_not_inform"]):
-            logger.info("Successfully initialized ephemeral keys with contacts (%s)", contact_id)
-            ui_queue.put({"type": "showinfo", "title": "Success", "message": f"Successfully initialized ephemeral keys with contact ({contact_id[:32]})"})
-        else:
-            logger.info("Not informing the user of successful ephemeral keys initialization because step was likely automatically fired")
-            
-            # We delete incase user end up rotating per-contact long-term keys within the same session
-            with user_data_lock:
-                del user_data["tmp"]["pfs_do_not_inform"][contact_id]
-    else:
-        # Send our ephemeral keys back to the contact
+    if our_kyber_private_key is None:
         send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 
-    with user_data_lock:
-        if contact_id in user_data["tmp"]["ephemeral_key_send_lock"]:
-            del user_data["tmp"]["ephemeral_key_send_lock"][contact_id]
-
-
     save_account_data(user_data, user_data_lock)
+
+    logger.info("contact (%s) has rotated their Kyber keys", contact_id)
 
