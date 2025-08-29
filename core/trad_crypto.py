@@ -10,9 +10,6 @@ These functions rely on the cryptography library and are intended for use within
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.x448 import X448PrivateKey
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from core.constants import (
     OTP_PAD_SIZE,
     AES_GCM_NONCE_LEN,
@@ -24,40 +21,6 @@ from core.constants import (
 )
 import hashlib
 import secrets
-
-
-
-def generate_curve448_private_key(): 
-    """
-    Generates a Curve448 private key.
-
-    Returns:
-        A Curve448 private key of type X448PrivateKey.
-    """
-    return X448PrivateKey.generate()
-
-
-def curve448_exchange(private_key, public_key, length: int = 56, salt: bytes = None) -> bytes:
-    """
-    Computes a shared secret.
-
-    Args:
-        private_key: The Private key of sender.
-        public_key: The Public key of receiver.
-        salt: Optional salt
-
-    Returns:
-        A 56-byte shared secret.
-    """
-
-    shared_secret = private_key.exchange(peer_public_key)
-    return HKDF(
-        algorithm = hashes.SHA3_512(),
-        length    = length,
-        salt      = salt,
-        info      = b"Coldwire Curve448 Shared Secret Key For OTP Pad",
-    ).derive(shared_secret)
-
 
 
 

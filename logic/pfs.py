@@ -89,7 +89,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
             }
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] = 0
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"] = CLASSIC_MCELIECE_8_F_ROTATE_AT
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]        = CLASSIC_MCELIECE_8_F_ROTATE_AT
 
 
 
