@@ -69,8 +69,8 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                         CLASSIC_MCELIECE_8_F_NAME: {
                             "public_key": None,
                             "private_key": None,
-                            "rotation_counter": None,
-                            "rotate_at": None,
+                            "rotation_counter": 0,
+                            "rotate_at": 2,
                         },
                         ML_KEM_1024_NAME: {
                             "public_key": None,

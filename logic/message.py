@@ -18,10 +18,13 @@ from core.crypto import (
     decrypt_shared_secrets,
     create_signature,
     verify_signature,
+    one_time_pad,
     otp_encrypt_with_padding,
     otp_decrypt_with_padding
 )
 from core.constants import (
+    ALGOS_BUFFER_LIMITS,
+    OTP_PAD_SIZE,
     OTP_PADDING_LIMIT,
     OTP_PADDING_LENGTH,
     ML_KEM_1024_NAME,
@@ -37,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue) -> bool:
     """
-        Generates a new OTP batch, signs it with Dilithium, and sends it to the server.
+        Generates a new hash-chained OTP batch, signs it with Dilithium, and sends it to the server.
         Updates local pad and hash chain state upon success.
         Returns:
             bool: True if successful, False otherwise.
@@ -46,17 +49,20 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
  
-        contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
-        our_lt_private_key       = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
+        contact_kyber_public_key    = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
+        contact_mceliece_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]
+        our_lt_private_key          = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
  
 
-    kyber_ciphertext_blob, pads = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
 
-    otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob, our_lt_private_key)
+    kyber_ciphertext_blob   , kyber_shared_secrets    = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
+    mceliece_ciphertext_blob, mceliece_shared_secrets = generate_shared_secrets(contact_mceliece_public_key, CLASSIC_MCELIECE_8_F_NAME)
+
+    otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob + mceliece_ciphertext_blob, our_lt_private_key)
     otp_batch_signature = b64encode(otp_batch_signature).decode()
 
     payload = {
-            "otp_hashchain_ciphertext": b64encode(kyber_ciphertext_blob).decode(),
+            "otp_hashchain_ciphertext": b64encode(kyber_ciphertext_blob + mceliece_ciphertext_blob).decode(),
             "otp_hashchain_signature": otp_batch_signature,
             "recipient": contact_id
         }
@@ -65,7 +71,9 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our one-time-pads key batch to the server"})
         return False
-    
+
+    pads = one_time_pad(kyber_shared_secrets, mceliece_shared_secrets)
+
     # We update & save only at the end, so if request fails, we do not desync our state.
     with user_data_lock:
         user_data["contacts"][contact_id]["our_pads"]["pads"]       = pads[64:]
@@ -92,11 +100,14 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
 
-        contact_kyber_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
+        contact_kyber_public_key    = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
+        contact_mceliece_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]
 
+        our_pads         = user_data["contacts"][contact_id]["our_pads"]["pads"]
+       
      
-    if contact_kyber_public_key is None:
-        logger.debug("This shouldn't happen, contact kyber keys are not initialized even once yet???")
+    if contact_kyber_public_key is None or contact_mceliece_public_key is None:
+        logger.debug("This shouldn't happen, contact ephemeral keys are not initialized even once yet???")
         ui_queue.put({
                 "type": "showwarning",
                 "title": f"Warning for {contact_id[:32]}",
@@ -106,14 +117,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         return False
 
 
-
-    with user_data_lock:
-        our_pads         = user_data["contacts"][contact_id]["our_pads"]["pads"]
-       
-        rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"]
-        rotate_at        = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
-
-
+        
     # If we don't have any one-time-pads, we send new pads to the contact
     if not our_pads:
         logger.debug("We have no OTP pads to use.")
@@ -124,11 +128,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
         with user_data_lock:
             our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
-
-        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
-        
- 
+             
     with user_data_lock:
         our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
 
@@ -148,10 +148,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         with user_data_lock:
             our_pads        = user_data["contacts"][contact_id]["our_pads"]["pads"]
             our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
-
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
-
-        logger.debug("Incremented rotation_counter by 1. (%d)", rotation_counter)
         
         # We remove old hashchain from message and calculate new next hash in the chain
         message_encoded = message_encoded[64:]
@@ -237,24 +233,42 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
             return
 
         our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
+        our_mceliece_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
 
+        # / 32 because shared secret is 32 bytes
         try:
-            contact_pads = decrypt_shared_secrets(otp_hashchain_ciphertext, our_kyber_key, ML_KEM_1024_NAME)
+            contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["CT_LEN"] * int(OTP_PAD_SIZE / 32)], our_kyber_key, ML_KEM_1024_NAME)
         except:
-            logger.debug("Failed to decrypt shared_secrets, possible MiTM?")
+            logger.error("Failed to decrypt Kyber's shared_secrets, possible MiTM?")
             return
 
+        try:
+            contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["CT_LEN"] * int(OTP_PAD_SIZE / 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
+        except:
+            logger.error("Failed to decrypt McEliece's shared_secrets, possible MiTM?")
+            return
+        
+        contact_pads = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
 
         with user_data_lock:
             user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads[64:]
             user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = contact_pads[:64]
-            new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
+
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
+            
+            new_ml_kem_keys  = user_data["tmp"]["new_ml_kem_keys"]
+
+            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"]
+
+        
+        logger.debug("Incremented McEliece's rotation_counter by 1 (now is %d) for contact (%s)", rotation_counter, contact_id)
 
         logger.info("Saved contact (%s) new batch of One-Time-Pads and hash chain seed", contact_id)
         save_account_data(user_data, user_data_lock)
 
+
         if contact_id not in new_ml_kem_keys:
-            logger.info("Rotating our ephemeral Kyber keys") 
+            logger.info("Rotating our ephemeral keys") 
             send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
             save_account_data(user_data, user_data_lock)
 

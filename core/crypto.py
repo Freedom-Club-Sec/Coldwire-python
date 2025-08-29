@@ -169,11 +169,12 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
     shared_secrets = b''
     cursor         = 0
 
-    with oqs.KeyEncapsulation(ML_KEM_1024_NAME, secret_key=private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
+
+    with oqs.KeyEncapsulation(algorithm, secret_key=private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
             if len(ciphertext) != cipher_size:
-                raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete")
+                 raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete ({len(ciphertext)})")
 
             shared_secret = kem.decap_secret(ciphertext)
             shared_secrets += shared_secret
