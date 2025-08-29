@@ -62,5 +62,8 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
         # *Sigh* I had to put this here because if we rotate before finishing reading all of the messages
         # we would literally overwrite our own key.
+        # TODO: We need to keep the last used key and use it when decapsulation with new key gives invalid output
+        # because it might actually take some time for our keys to be uploaded to server + other servers and to the contact.
+        #
         update_ephemeral_keys(user_data, user_data_lock)
 

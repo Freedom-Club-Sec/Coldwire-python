@@ -2,7 +2,8 @@ from pathlib import Path
 from base64 import b64encode, b64decode
 from core.constants import (
         ML_KEM_1024_NAME,
-        CLASSIC_MCELIECE_8_F_NAME
+        CLASSIC_MCELIECE_8_F_NAME,
+        ACCOUNT_FILE_PATH
 
 )
 import core.trad_crypto as crypto
@@ -10,8 +11,6 @@ import json
 import copy
 import logging
 
-
-ACCOUNT_FILE_PATH = "account.coldwire"
 
 logger = logging.getLogger(__name__)
 

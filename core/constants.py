@@ -2,6 +2,9 @@
 APP_NAME      = "Coldwire"
 APP_VERSION   = "0.1"
 
+# hard-coded filepaths
+ACCOUNT_FILE_PATH = "account.coldwire"
+
 # network defaults (seconds)
 LONGPOLL_MIN  = 5
 LONGPOLL_MAX  = 30  

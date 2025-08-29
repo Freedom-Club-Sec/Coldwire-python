@@ -169,7 +169,6 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
     shared_secrets = b''
     cursor         = 0
 
-
     with oqs.KeyEncapsulation(algorithm, secret_key=private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
         while len(shared_secrets) < otp_pad_size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]

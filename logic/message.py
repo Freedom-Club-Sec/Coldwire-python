@@ -283,7 +283,8 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
         if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
             # TODO: Maybe reset our local pads as well?
-            logger.warning("Message payload is larger than our local pads for the contact, we are skipping this message..")
+            # I feel like we should do something more when we hit this case, but I am not sure.
+            logger.error("Message payload is larger than our local pads for the contact (%s), we are skipping this message.. This is most likely a bug, please open an issue on Github (https://github.com/Freedom-Club-Sec/Coldwire)", contact_id)
             return
 
         message_decrypted = otp_decrypt_with_padding(message_encrypted, contact_pads[:len(message_encrypted)])
