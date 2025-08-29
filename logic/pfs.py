@@ -10,6 +10,7 @@ from core.constants import (
     ALGOS_BUFFER_LIMITS,
     ML_KEM_1024_NAME,
     CLASSIC_MCELIECE_8_F_NAME,
+    CLASSIC_MCELIECE_8_F_ROTATE_AT
 )
 from core.trad_crypto import sha3_512
 from base64 import b64encode, b64decode
@@ -88,7 +89,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
             }
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] = 0
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"] = 2
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"] = CLASSIC_MCELIECE_8_F_ROTATE_AT
 
 
 
@@ -188,7 +189,10 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         our_kyber_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
         our_mceliece_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
 
-    if our_kyber_private_key is None or our_mceliece_private_key is None:
+        new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
+        new_code_kem_keys = user_data["tmp"]["new_code_kem_keys"]
+
+    if (our_kyber_private_key is None or our_mceliece_private_key is None) and ((contact_id not in new_ml_kem_keys) and (contact_id not in new_code_kem_keys)):
         send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
         logger.info("We are sending the contact (%s) our ephemeral keys because we didnt do it before.", contact_id)
 

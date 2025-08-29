@@ -35,6 +35,9 @@ CLASSIC_MCELIECE_8_F_PK_LEN = 1357824
 CLASSIC_MCELIECE_8_F_CT_LEN = 208 
 
 
+CLASSIC_MCELIECE_8_F_ROTATE_AT = 3 # Default OTP batches needed to be sent for a key rotation to occur
+
+
 
 ALGOS_BUFFER_LIMITS   = {
     ML_KEM_1024_NAME: {
