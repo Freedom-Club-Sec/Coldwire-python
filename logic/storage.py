@@ -1,12 +1,16 @@
 from pathlib import Path
 from base64 import b64encode, b64decode
+from core.constants import (
+        ML_KEM_1024_NAME,
+        CLASSIC_MCELIECE_8_F_NAME,
+        ACCOUNT_FILE_PATH
+
+)
 import core.trad_crypto as crypto
 import json
 import copy
 import logging
 
-
-ACCOUNT_FILE_PATH = "account.coldwire"
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +38,9 @@ def load_account_data(password = None) -> dict:
 
 
     user_data["tmp"] = {
-        "ephemeral_key_send_lock": {},
-        "pfs_do_not_inform": {},
-        "password": password
+        "password": password,
+        "new_ml_kem_keys": {},
+        "new_code_kem_keys": {}
     }
 
     
@@ -47,13 +51,24 @@ def load_account_data(password = None) -> dict:
     for contact_id in user_data["contacts"]:
         # They probably haven't exchanged yet, so it's fine to skip decoding them 
         try:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME], validate=True)
         except TypeError:
             pass
         
         try:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"], validate=True)
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["public_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME], validate=True)
+        except TypeError:
+            pass
+        
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"], validate=True)
+        except TypeError:
+            pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"], validate=True)
         except TypeError:
             pass
 
@@ -112,15 +127,29 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
     for contact_id in user_data["contacts"]:
         # They probably haven't exchanged yet, so it's fine to skip decoding them 
         try:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]).decode()
+        except TypeError:
+            pass
+
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]).decode()
+        except TypeError:
+            pass
+
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"]).decode()
         except TypeError:
             pass
 
         try:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["private_key"]).decode()
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"]["public_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]).decode()
         except TypeError:
             pass
+
 
         
         try:
@@ -157,6 +186,7 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
             pass
 
 
+    # logger.debug("User_data before saving: %s", str(user_data))
 
     if password is None:
         with open(ACCOUNT_FILE_PATH, "w", encoding="utf-8") as f:

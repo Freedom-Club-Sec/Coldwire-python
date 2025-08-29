@@ -7,7 +7,7 @@ class LevelBasedFormatter(logging.Formatter):
     FORMATS = {
         logging.DEBUG:    "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
         logging.INFO:     "%(asctime)s [%(levelname)s] -  %(message)s",
-        logging.WARNING:  "%(asctime)s %(levelname)s] %(name)s - %(message)s",
+        logging.WARNING:  "%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         logging.ERROR:    "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
         logging.CRITICAL: "%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s"
     }

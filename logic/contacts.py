@@ -3,6 +3,11 @@ import string
 import json
 import math
 
+from core.constants import (
+    ML_KEM_1024_NAME,
+    CLASSIC_MCELIECE_8_F_NAME,
+    CLASSIC_MCELIECE_8_F_ROTATE_AT
+)
 
 def generate_nickname_id(length: int = 4) -> str:
     # Calculate nickname ID: digits get >= letters
@@ -56,14 +61,23 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                     "smp_step": None,
                 },
                 "ephemeral_keys": {
-                    "contact_public_key": None,
+                    "contact_public_keys": {
+                        CLASSIC_MCELIECE_8_F_NAME: None,
+                        ML_KEM_1024_NAME: None
+                    },
                     "our_keys": {
-                        "public_key": None,
-                        "private_key": None,
+                        CLASSIC_MCELIECE_8_F_NAME: {
+                            "public_key": None,
+                            "private_key": None,
+                            "rotation_counter": 0,
+                            "rotate_at": CLASSIC_MCELIECE_8_F_ROTATE_AT,
                         },
-                    "rotation_counter": None,
-                    "rotate_at": None,
+                        ML_KEM_1024_NAME: {
+                            "public_key": None,
+                            "private_key": None,
+                        },
 
+                    }
                 },
                 "our_pads": {
                     "hash_chain": None,

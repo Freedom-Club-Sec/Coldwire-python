@@ -1,6 +1,6 @@
 from core.requests import http_request
 from logic.smp import smp_unanswered_questions, smp_data_handler
-from logic.pfs import pfs_data_handler
+from logic.pfs import pfs_data_handler, update_ephemeral_keys
 from logic.message import messages_data_handler
 from core.constants import (
     LONGPOLL_MIN,
@@ -29,9 +29,11 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             logger.debug("Data longpoll request has timed out, retrying...")
             continue
 
-        logger.debug("SMP messages: %s", json.dumps(response, indent = 2))
+        # logger.debug("Data received: %s", json.dumps(response, indent = 2)[:2000])
 
         for message in response["messages"]:
+            logger.debug("Received data message: %s", json.dumps(message, indent = 2)[:5000])
+
             # Sanity check universal message fields
             if (not "sender" in message) or (not message["sender"].isdigit()) or (len(message["sender"]) != 16):
                 logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with no (or malformed) sender...")
@@ -52,9 +54,16 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
             elif message["data_type"] == "message":
                 messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message)
-
             else:
                 logger.error(
                         "Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with unknown data type (%s)...", 
                         message["data_type"]
                     )
+
+        # *Sigh* I had to put this here because if we rotate before finishing reading all of the messages
+        # we would literally overwrite our own key.
+        # TODO: We need to keep the last used key and use it when decapsulation with new key gives invalid output
+        # because it might actually take some time for our keys to be uploaded to server + other servers and to the contact.
+        #
+        update_ephemeral_keys(user_data, user_data_lock)
+

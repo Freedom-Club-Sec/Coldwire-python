@@ -11,6 +11,7 @@ These functions rely on the cryptography library and are intended for use within
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from core.constants import (
+    OTP_PAD_SIZE,
     AES_GCM_NONCE_LEN,
     ARGON2_ITERS,
     ARGON2_MEMORY,
@@ -20,6 +21,7 @@ from core.constants import (
 )
 import hashlib
 import secrets
+
 
 
 def sha3_512(data: bytes) -> bytes:
@@ -37,12 +39,7 @@ def sha3_512(data: bytes) -> bytes:
     return h.digest()
 
 
-def derive_key_argon2id(
-    password: bytes,
-    salt: bytes = None,
-    salt_length: int = ARGON2_SALT_LEN,
-    output_length: int = ARGON2_OUTPUT_LEN
-) -> tuple[bytes, bytes]:
+def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = ARGON2_SALT_LEN, output_length: int = ARGON2_OUTPUT_LEN) -> tuple[bytes, bytes]:
     """
     Derive a symmetric key from a password using Argon2id.
 
