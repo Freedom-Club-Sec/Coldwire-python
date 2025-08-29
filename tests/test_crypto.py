@@ -1,14 +1,13 @@
 # tests/test_crypto.py
 """
-Tests for ML-KEM-1024 (Kyber) and ML-DSA-87 (Dilithium5).
+Tests for ML-KEM-1024, ML-DSA-87, Classic-McEliece-8192128f.
 Covers:
 - Key generation conformance to NIST spec
-- Dilithium Signature generation and verification
+- Signature generation and verification
 - OTP encryption using Kyber key exchange
 - Hash chain tamper detection
 """
 
-import pytest
 from core.crypto import (
     generate_kem_keys,
     generate_sign_keys,
@@ -29,7 +28,13 @@ from core.constants import (
     ML_DSA_87_NAME,  
     ML_DSA_87_SK_LEN,
     ML_DSA_87_PK_LEN,
-    ML_DSA_87_SIGN_LEN
+    ML_DSA_87_SIGN_LEN,
+
+    CLASSIC_MCELIECE_8_F_NAME,
+    CLASSIC_MCELIECE_8_F_SK_LEN, 
+    CLASSIC_MCELIECE_8_F_PK_LEN,
+    CLASSIC_MCELIECE_8_F_CT_LEN 
+
 )
 from core.trad_crypto import sha3_512
 
@@ -60,6 +65,26 @@ def test_mlkem_keygen_basic():
         assert isinstance(private_key, bytes) and isinstance(public_key, bytes), "Keys must be bytes"
         assert len(private_key) == ML_KEM_1024_SK_LEN, "Private key length mismatch with spec"
         assert len(public_key)  == ML_KEM_1024_PK_LEN, "Public key length mismatch with spec"
+
+        seen_private_keys.add(private_key)
+        seen_public_keys.add(public_key)
+
+
+def test_mceliece_keygen_basic():
+    """Validate ML-KEM-1024 key generation: uniqueness, type, and length."""
+    seen_private_keys = set()
+    seen_public_keys  = set()
+
+    for _ in range(10):
+        private_key, public_key = generate_kem_keys(CLASSIC_MCELIECE_8_F_NAME)
+
+        assert private_key not in seen_private_keys, "Duplicate private key detected"
+        assert public_key not in seen_public_keys,  "Duplicate public key detected"
+
+        assert private_key != public_key, "Private and public keys must differ"
+        assert isinstance(private_key, bytes) and isinstance(public_key, bytes), "Keys must be bytes"
+        assert len(private_key) == CLASSIC_MCELIECE_8_F_SK_LEN, "Private key length mismatch with spec"
+        assert len(public_key)  == CLASSIC_MCELIECE_8_F_PK_LEN,, "Public key length mismatch with spec"
 
         seen_private_keys.add(private_key)
         seen_public_keys.add(public_key)

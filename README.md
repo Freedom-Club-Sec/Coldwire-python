@@ -6,11 +6,10 @@
 
 ## 🔒 Security Model & Features
 - **Best‑case security**: achieves [unbreakable encryption](https://en.wikipedia.org/wiki/One-time_pad) under the principles of information theory using [one‑time pads](https://en.wikipedia.org/wiki/One-time_pad) 
-- **Worst‑case security**: falls back only to ML‑KEM‑1024 (Kyber) resistance  
+- **Worst‑case security**: falls back only to combined security of ML‑KEM‑1024 and McEliece8192128  
 - **Perfect-Forward-Secrecy**: on every [OTP](https://en.wikipedia.org/wiki/One-time_pad) batch through ephemeral PQC key exchanges  
 - **Plausible Deniability**: messages are not cryptographically tied to you, providing more deniability than [Off‑The‑Record messaging](https://en.wikipedia.org/wiki/Off-the-record_messaging) !
 - **Mandatory SMP**: We enforce [Socialist millionaire problem](https://en.wikipedia.org/wiki/Socialist_millionaire_problem) before any chat. **MiTM attacks are impossible**.  
-- **NIST PQC Tier‑5**: We use highest security algorithms (Kyber1024, Dilithium5) that provide AES‑256 strength using [OQS Project](https://openquantumsafe.org/)
 - **Minimal Attack Surface**:  
   - Tkinter UI only, no embedded browsers or HTML
   - Minimal Python dependecies
