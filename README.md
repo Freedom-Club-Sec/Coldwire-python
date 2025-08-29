@@ -3,7 +3,9 @@
 <p align="center">
 <img width="512" height="512" alt="coldwire_logo" src="https://github.com/user-attachments/assets/39dc58f4-c078-429a-8cc7-f489383c80ed" />
 </p>
+
 ---
+
 **Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
 
 ## 🔒 Security Model & Features
