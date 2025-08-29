@@ -84,7 +84,7 @@ def test_mceliece_keygen_basic():
         assert private_key != public_key, "Private and public keys must differ"
         assert isinstance(private_key, bytes) and isinstance(public_key, bytes), "Keys must be bytes"
         assert len(private_key) == CLASSIC_MCELIECE_8_F_SK_LEN, "Private key length mismatch with spec"
-        assert len(public_key)  == CLASSIC_MCELIECE_8_F_PK_LEN,, "Public key length mismatch with spec"
+        assert len(public_key)  == CLASSIC_MCELIECE_8_F_PK_LEN, "Public key length mismatch with spec"
 
         seen_private_keys.add(private_key)
         seen_public_keys.add(public_key)
