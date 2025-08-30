@@ -245,7 +245,7 @@ def smp_step_4(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     # Derieve a high-entropy secret key from the low-entropy answer 
     argon2id_salt = sha3_512(our_nonce + contact_nonce)
-    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=64)
+    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=SMP_ANSWER_OUTPUT_LEN)
 
     # Compute the proof
     our_message = our_nonce + contact_nonce + our_key_fingerprint

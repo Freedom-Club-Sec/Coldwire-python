@@ -1,5 +1,9 @@
-from urllib import request
+from urllib import request, error
+import urllib
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 _ORIGINAL_SOCKET = None
 
@@ -66,10 +70,15 @@ def http_request(url: str, method: str, auth_token: str = None, payload: dict = 
         req.add_header("Authorization", "Bearer " + auth_token)
 
     # NOTE: urllib raises a HTTPError for status code >= 400
-    if longpoll == -1:
-        with request.urlopen(req) as response:
-            return json.loads(response.read().decode())
-    else:
-        with request.urlopen(req, timeout=longpoll) as response:
-            return json.loads(response.read().decode())
 
+    try:
+        if longpoll == -1:
+            with request.urlopen(req) as response:
+                return json.loads(response.read().decode())
+        else:
+            with request.urlopen(req, timeout=longpoll) as response:
+                return json.loads(response.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        logger.error("We received error from server: %s", body)
+        raise Exception(body)

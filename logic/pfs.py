@@ -11,7 +11,8 @@ from core.constants import (
     ML_KEM_1024_NAME,
     ML_DSA_87_NAME,
     CLASSIC_MCELIECE_8_F_NAME,
-    CLASSIC_MCELIECE_8_F_ROTATE_AT
+    CLASSIC_MCELIECE_8_F_ROTATE_AT,
+    KEYS_HASH_CHAIN_LEN
 )
 from core.trad_crypto import sha3_512
 from base64 import b64encode, b64decode
@@ -39,7 +40,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
     if not user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"]:
         with user_data_lock:
             # Set up the hash chain's initial seed
-            user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = secrets.token_bytes(64)
+            user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = secrets.token_bytes(KEYS_HASH_CHAIN_LEN)
             
             our_hash_chain = user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] 
     else:
@@ -157,7 +158,7 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         logger.error("contact (%s) sent message of unknown pfs_type (%s)", contact_id, message["pfs_type"])
         return
 
-    contact_hash_chain = contact_publickeys_hashchain[:64]
+    contact_hash_chain = contact_publickeys_hashchain[:KEYS_HASH_CHAIN_LEN]
 
     # If we do not have a hashchain for the contact, we don't need to compute the chain, just save.
     if not user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"]:
@@ -172,11 +173,11 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
             logger.error("Contact hash chain does not match our computed hash chain, we are skipping this PFS message...")
             return
 
-    contact_kyber_public_key = contact_publickeys_hashchain[64: ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + 64]
+    contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN]
     if message["pfs_type"] == "full":
         logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
 
-        contact_mceliece_public_key = contact_publickeys_hashchain[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + 64:]
+        contact_mceliece_public_key = contact_publickeys_hashchain[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN:]
         with user_data_lock:
             user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = contact_mceliece_public_key
 
