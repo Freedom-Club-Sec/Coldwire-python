@@ -10,6 +10,8 @@ LONGPOLL_MIN  = 5
 LONGPOLL_MAX  = 30  
 
 # crypto parameters (bytes)
+CHALLENGE_LEN     = 11264
+
 AES_GCM_NONCE_LEN = 12
 
 OTP_PAD_SIZE       = 11264

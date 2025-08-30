@@ -2,7 +2,8 @@ from base64 import b64encode, b64decode
 from core.requests import http_request
 from core.crypto import create_signature 
 from core.constants import (
-        ML_DSA_87_NAME
+        ML_DSA_87_NAME,
+        CHALLENGE_LEN
 )
 
 def authenticate_account(user_data: dict) -> dict:
@@ -11,18 +12,18 @@ def authenticate_account(user_data: dict) -> dict:
     private_key = user_data["lt_auth_sign_keys"]["private_key"]
     public_key_encoded = user_data["lt_auth_sign_keys"]["public_key"]
     public_key_encoded = b64encode(public_key_encoded).decode()
+    user_id = user_data.get("user_id") or ""
 
     try:
-        user_id = user_data.get("user_id") or ""
-
         response = http_request(url + "/authenticate/init", "POST", payload = {"public_key": public_key_encoded, "user_id": user_id })
-        if not 'challenge' in response:
-            raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
     except Exception:
         if user_data["settings"]["proxy_info"] is not None:
             raise ValueError("Could not connect to server! Are you sure your proxy settings are valid ?")
         else:
             raise ValueError("Could not connect to server! Are you sure the URL is valid ?")
+
+    if not 'challenge' in response:
+        raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
 
     try:
         challenge = b64decode(response["challenge"], validate=True)
@@ -30,7 +31,7 @@ def authenticate_account(user_data: dict) -> dict:
         raise ValueError("Server gave a malformed challenge! Are you sure this is Coldwire server ?")
 
 
-    signature = create_signature(ML_DSA_87_NAME, challenge, private_key)
+    signature = create_signature(ML_DSA_87_NAME, challenge[:CHALLENGE_LEN], private_key)
 
     try:
         response = http_request(url + "/authenticate/verify", "POST", payload = {"signature": b64encode(signature).decode(), "challenge": response["challenge"]})
