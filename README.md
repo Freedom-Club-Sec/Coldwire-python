@@ -1,7 +1,11 @@
 # Coldwire - The Ultra‑Paranoid Post‑Quantum Messenger
 ![Tests](https://github.com/Freedom-Club-Sec/Coldwire/actions/workflows/tests.yml/badge.svg)  ![Coverage](https://coveralls.io/repos/github/Freedom-Club-Sec/Coldwire/badge.svg?branch=main) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1c34011b18284a3cb349ffe5415eea53)](https://app.codacy.com/gh/Freedom-Club-Sec/Coldwire/dashboard)
+<p align="center">
+<img width="512" height="512" alt="coldwire_logo" src="https://github.com/user-attachments/assets/39dc58f4-c078-429a-8cc7-f489383c80ed" />
+</p>
 
 ---
+
 **Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
 
 ## 🔒 Security Model & Features
