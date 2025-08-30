@@ -27,7 +27,7 @@
     Step 4 user receive this proof and try to compute an identical one
     If we succeed, the verification process is complete and we mark contact's as verified
    
-    This provides a mathematical guarantee of authenticity and integrity for our long-term public keys 
+    This provides a strong guarantee of authenticity and integrity for our long-term public keys 
     IF the answer has enough entropy to be uncrackable *just* for the duration of the process
        
 """
@@ -40,7 +40,8 @@ from core.crypto import generate_sign_keys
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
 from core.constants import (
-        SMP_NONCE_LENGTH
+        SMP_NONCE_LENGTH,
+        SMP_ANSWER_OUTPUT_LEN
 )
 import hashlib
 import secrets
@@ -91,7 +92,7 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"]             = 1
 
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = private_key
-        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = public_key
+        user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]  = public_key
 
 
 
@@ -120,7 +121,7 @@ def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
     # Derieve a high-entropy secret key from the low-entropy answer 
     argon2id_salt = sha3_512(our_nonce + contact_nonce)
-    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=64)
+    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=SMP_ANSWER_OUTPUT_LEN)
 
     # Compute our proof
     our_message = contact_nonce + our_nonce + contact_key_fingerprint
@@ -191,7 +192,7 @@ def smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     # Derieve a high-entropy secret key from the low-entropy answer 
     argon2id_salt = sha3_512(contact_nonce + our_nonce)
-    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=64)
+    answer_secret, _ = derive_key_argon2id(answer.encode(), salt=argon2id_salt, output_length=SMP_ANSWER_OUTPUT_LEN)
 
     # Compute the proof
     our_message = our_nonce + contact_nonce + our_key_fingerprint
