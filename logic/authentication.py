@@ -1,3 +1,10 @@
+"""
+    logic/authentication.py
+    ----------
+    Implements client-side account authentication with the Coldwire server.
+    Uses ML-DSA-87 signatures to sign a challenge to verify account ownership.
+
+"""
 from base64 import b64encode, b64decode
 from core.requests import http_request
 from core.crypto import create_signature 
@@ -7,6 +14,21 @@ from core.constants import (
 )
 
 def authenticate_account(user_data: dict) -> dict:
+    """
+    Authenticate an account with the Coldwire server.
+
+    Args:
+        user_data (dict): Shared user account state.
+
+    Returns:
+        dict with the user_data containing:
+            - "user_id" (str): Server-assigned user ID.
+            - "token" (str): Session token issued by the server.
+
+    Raises:
+        ValueError: If the server cannot be reached, gives malformed responses, or if authentication fails.
+
+    """
     url = user_data["server_url"] 
 
     private_key = user_data["lt_auth_sign_keys"]["private_key"]

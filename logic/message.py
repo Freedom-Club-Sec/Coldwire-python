@@ -1,12 +1,13 @@
 """
-logic/message.py
------------
-Message sending, receiving, and one-time-pad key exchange logic.
-Handles:
-- Generation and transmission of hybrid ciphertext OTP batches
-- Ephemeral key rotation enforcement for PFS
-- Message encryption/decryption with hash chain integrity checks
-- Incoming message processing and replay/tampering protection
+    logic/message.py
+    -----------
+    Message sending, receiving, and one-time-pad key exchange logic.
+
+    Handles:
+    - Generation and transmission of hybrid ciphertext OTP batches
+    - Ephemeral key rotation enforcement for PFS
+    - Message encryption/decryption with hash chain integrity checks
+    - Incoming message processing and replay/tampering protection
 """
 
 from core.requests import http_request

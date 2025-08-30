@@ -1,3 +1,15 @@
+"""
+    logic/pfs.py
+    -----------------
+    Handles Perfect Forward Secrecy (PFS) ephemeral keys exchange and rotation for contacts.
+
+    Handles:
+    - Generates and rotates ephemeral (one-time use) ML-KEM-1024 keys and (medium-term) Classic McEliece keys.
+    - Uses per-contact hash chains to prevent replay attacks, and verifies authenticity using ML-DSA-87.
+    - Sends and receives signed ephemeral keys using long-term signing keys.
+    - Updates local account storage with new key material after successful exchange.
+"""
+
 from core.requests import http_request
 from logic.storage import save_account_data
 from core.crypto import (
@@ -20,19 +32,38 @@ import secrets
 import copy
 import json
 import logging
+import threading
+import queue
 
 logger = logging.getLogger(__name__)
 
 
-def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> None:
+def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, contact_id: str, ui_queue: queue.Queue) -> None:
+    """
+    Generate and send fresh ephemeral keys to a contact.
+
+    - Maintains a per-contact hash chain for signing key material.
+    - Generates new Kyber1024 keys every call.
+    - Optionally rotates McEliece keys if rotation threshold is reached.
+    - Signs all key material with the long-term signing key.
+    - Sends to the server using an authenticated HTTP request.
+    - If successful, stores new keys in `user_data["tmp"]` for later update.
+
+    Args:
+        user_data (dict): Shared user account state.
+        user_data_lock (threading.Lock): Lock protecting shared state.
+        contact_id (str): Target contact's ID.
+        ui_queue (queue.Queue): UI queue for showing error messages.
+    """
+
     with user_data_lock:
         user_data_copied = copy.deepcopy(user_data)
-        
-        rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
-        rotate_at = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
+ 
+    server_url       = user_data_copied["server_url"]
+    auth_token       = user_data_copied["token"]
 
-        server_url = user_data["server_url"]
-        auth_token = user_data["token"]
+    rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
+    rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
 
     lt_sign_private_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
     
@@ -48,7 +79,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
         # We continue the hash chain
         our_hash_chain = sha3_512(our_hash_chain)
 
-    # Generate new Kyber1024 keys for us
+    # Generate new ML-KEM-1024 keys for us
     kyber_private_key, kyber_public_key = generate_kem_keys(ML_KEM_1024_NAME)
     publickeys_hashchain = our_hash_chain + kyber_public_key
 
@@ -100,7 +131,18 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
 
 
 
-def update_ephemeral_keys(user_data, user_data_lock) -> None:
+def update_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock) -> None:
+    """
+    Commit newly generated ephemeral keys to permanent storage.
+
+    - Moves keys from `user_data["tmp"]` into `user_data["contacts"]`.
+    - Clears temporary key buffers after update.
+    - Saves account state to disk.
+
+    Args:
+        user_data (dict): Shared user account state.
+        user_data_lock (threading.Lock): Lock protecting shared state.
+    """
     with user_data_lock:
         new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
         new_code_kem_keys = user_data["tmp"]["new_code_kem_keys"]
@@ -126,24 +168,42 @@ def update_ephemeral_keys(user_data, user_data_lock) -> None:
 
 
 
-def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message) -> None:
+def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_copied: dict, ui_queue: queue.Queue, message: dict) -> None:
+    """
+    Handle incoming PFS (Perfect Forward Secrecy) key messages from contacts.
+
+    - Validates the contact exists and their signing key is verified.
+    - Verifies the signature on the ephemeral keys + hash chain.
+    - Updates stored contact ephemeral keys and hash chains.
+    - If we don't have keys yet for this contact, triggers sending ours.
+    - Saves updated account state to disk.
+
+    Args:
+        user_data (dict): Shared user account state.
+        user_data_lock (threading.Lock): Lock protecting shared state.
+        user_data_copied (dict): A read-only copy of user_data for consistency.
+        ui_queue (queue.Queue): UI queue for notifications/errors.
+        message (dict): Incoming PFS message from the server.
+    
+    Returns:
+        None
+    """
     contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
-        logger.error("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this PFS request for now")
-        logger.debug("Our saved contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
+        logger.error("Contact is not saved., maybe we (or they) are not synced? Ignoring this PFS message.")
+        logger.debug("Our saved contacts: %s", str(user_data_copied["contacts"]))
         return
 
-    # Contact's main long-term public signing key
+    # Contact's per-contact signing public-key
     contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
-
 
     if not contact_lt_public_key:
         logger.error("Contact long-term signing key is missing... 0 clue how we reached here, but we aint continuing..")
         return 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-        logger.error("Contact long-term signing key is not verified! it is possible that this is a MiTM attack, we ignoring this PFS for now.")
+        logger.error("Contact long-term signing key is not verified! We will ignore this PFS message.")
         return
 
     contact_hashchain_signature = b64decode(message["hashchain_signature"], validate=True)
@@ -170,7 +230,7 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         contact_last_hash_chain = sha3_512(contact_last_hash_chain)
 
         if contact_last_hash_chain != contact_hash_chain:
-            logger.error("Contact hash chain does not match our computed hash chain, we are skipping this PFS message...")
+            logger.error("Contact keys hash chain does not match our computed hash chain! Skipping this PFS message...")
             return
 
     contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN]
@@ -195,8 +255,8 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         new_code_kem_keys = user_data["tmp"]["new_code_kem_keys"]
 
     if (our_kyber_private_key is None or our_mceliece_private_key is None) and ((contact_id not in new_ml_kem_keys) and (contact_id not in new_code_kem_keys)):
-        send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
         logger.info("We are sending the contact (%s) our ephemeral keys because we didnt do it before.", contact_id)
+        send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 
     save_account_data(user_data, user_data_lock)
 
