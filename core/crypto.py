@@ -4,16 +4,12 @@ core/crypto
 Post-quantum cryptographic operations for Coldwire.
 
 Implements:
-- Key generation (ML-KEM-1024 / Kyber, ML-DSA-87 / Dilithium5)
+- Key generation (ML-KEM-1024,  ML-DSA-87, Classic-McEliece-8192128f)
 - Signature creation and verification
 - One-Time Pad (OTP) encryption with padding
-- Kyber-based OTP key exchange
+- Retrieving shared secrets from KEM chunks
 - Secure random number generation
-
-Notes:
-- Kyber keys and ciphertext sizes follow NIST spec for ML-KEM-1024.
-- Dilithium5 keys/signature sizes follow NIST spec for ML-DSA-87.
-- OTP padding randomizes message lengths to resist ciphertext length analysis.
+- OTP padding 
 """
 
 import oqs
@@ -37,7 +33,7 @@ def create_signature(algorithm: str, message: bytes, private_key: bytes) -> byte
     Creates a digital signature for a message using a post-quantum signature scheme.
 
     Args:
-        algorithm: PQ signature algorithm (e.g. "Dilithium5").
+        algorithm: PQ signature algorithm (e.g. "ML-DSA-87").
         message: Data to sign.
         private_key: Private key bytes.
 
@@ -52,7 +48,7 @@ def verify_signature(algorithm: str, message: bytes, signature: bytes, public_ke
     Verifies a post-quantum signature.
 
     Args:
-        algorithm: PQ signature algorithm (e.g. "Dilithium5").
+        algorithm: PQ signature algorithm (e.g. "ML-DSA-87").
         message: Original message data.
         signature: Signature to verify.
         public_key: Corresponding public key bytes.
@@ -68,7 +64,7 @@ def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
     Generates a new post-quantum signature keypair.
 
     Args:
-        algorithm: PQ signature algorithm (default ML-DSA-87 / Dilithium5).
+        algorithm: PQ signature algorithm (default ML-DSA-87).
 
     Returns:
         (private_key, public_key) as bytes.

@@ -1,6 +1,9 @@
 from base64 import b64encode, b64decode
 from core.requests import http_request
 from core.crypto import create_signature 
+from core.constants import (
+        ML_DSA_87_NAME
+)
 
 def authenticate_account(user_data: dict) -> dict:
     url = user_data["server_url"] 
@@ -27,7 +30,7 @@ def authenticate_account(user_data: dict) -> dict:
         raise ValueError("Server gave a malformed challenge! Are you sure this is Coldwire server ?")
 
 
-    signature = create_signature("Dilithium5", challenge, private_key)
+    signature = create_signature(ML_DSA_87_NAME, challenge, private_key)
 
     try:
         response = http_request(url + "/authenticate/verify", "POST", payload = {"signature": b64encode(signature).decode(), "challenge": response["challenge"]})

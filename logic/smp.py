@@ -39,6 +39,9 @@ from logic.pfs import send_new_ephemeral_keys
 from core.crypto import generate_sign_keys
 from core.trad_crypto import derive_key_argon2id, sha3_512
 from base64 import b64encode, b64decode
+from core.constants import (
+        SMP_NONCE_LENGTH
+)
 import hashlib
 import secrets
 import hmac
@@ -58,7 +61,7 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
     
-    our_nonce = b64encode(secrets.token_bytes(32)).decode()
+    our_nonce = b64encode(secrets.token_bytes(SMP_NONCE_LENGTH)).decode()
 
     private_key, public_key = generate_sign_keys()
 
@@ -99,7 +102,7 @@ def initiate_smp(user_data: dict, user_data_lock, contact_id: str, question: str
 def smp_step_2_answer_provided(user_data, user_data_lock, contact_id, answer, ui_queue) -> None:
     answer = normalize_answer(answer)
 
-    our_nonce = secrets.token_bytes(32)
+    our_nonce = secrets.token_bytes(SMP_NONCE_LENGTH)
 
     private_key, public_key = generate_sign_keys()
     

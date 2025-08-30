@@ -112,7 +112,7 @@ def test_mldsa_keygen_basic():
 
 def test_signature_verifcation():
     """Validate ML-DSA-87 signature creation and verification"""
-    private_key, public_key = generate_sign_keys(algorithm="Dilithium5")
+    private_key, public_key = generate_sign_keys(algorithm=ML_DSA_87_NAME)
 
     assert private_key != public_key, "Private and public keys are identical"
 

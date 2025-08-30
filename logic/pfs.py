@@ -9,6 +9,7 @@ from core.crypto import (
 from core.constants import (
     ALGOS_BUFFER_LIMITS,
     ML_KEM_1024_NAME,
+    ML_DSA_87_NAME,
     CLASSIC_MCELIECE_8_F_NAME,
     CLASSIC_MCELIECE_8_F_ROTATE_AT
 )
@@ -57,7 +58,7 @@ def send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue) -> 
         pfs_type = "full"
 
     # Sign them with our per-contact long-term private key
-    publickeys_hashchain_signature = create_signature("Dilithium5", publickeys_hashchain, lt_sign_private_key)
+    publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
     
     payload = {
             "publickeys_hashchain": b64encode(publickeys_hashchain).decode(),
@@ -147,7 +148,7 @@ def pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
     contact_hashchain_signature = b64decode(message["hashchain_signature"], validate=True)
     contact_publickeys_hashchain = b64decode(message["publickeys_hashchain"], validate=True)
 
-    valid_signature = verify_signature("Dilithium5", contact_publickeys_hashchain, contact_hashchain_signature, contact_lt_public_key)
+    valid_signature = verify_signature(ML_DSA_87_NAME, contact_publickeys_hashchain, contact_hashchain_signature, contact_lt_public_key)
     if not valid_signature:
         logger.error("Invalid ephemeral public-key + hashchain signature from contact (%s)", contact_id)
         return
