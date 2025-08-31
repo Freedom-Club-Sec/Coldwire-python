@@ -529,20 +529,20 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         smp_failure(user_data, user_data_lock, contact_id, ui_queue)
 
     elif smp_step == 3:
-        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): # or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 1):
+        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
             logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
             return
 
         smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue)
     elif smp_step == 4:
-        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): # or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 2):
+        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
             logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
             return
 
         smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
 
     elif smp_step == 5:
-        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): # or (user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] != 3):
+        if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
             logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
             return
 
