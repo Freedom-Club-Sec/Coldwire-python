@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import messagebox
 from ui.utils import *
 from logic.smp import initiate_smp
+from core.constants import (
+    SMP_QUESTION_MAX_LEN 
+)
 
 class SMPSetupWindow(tk.Toplevel):
     def __init__(self, master, contact_id):
@@ -52,23 +55,24 @@ class SMPSetupWindow(tk.Toplevel):
 
     def submit(self):
         question = self.question_entry.get().strip()
-        answer = self.answer_entry.get().strip().lower()
+        answer = self.answer_entry.get().strip()
+
         if not question or not answer:
             messagebox.showerror("Error", "Both fields are required.")
             return
 
-        if question.lower() == answer:
+        if question.lower() == answer.lower():
             messagebox.showerror("Error", "The question and answer must be different!")
             return
 
         
-        if answer in question.lower():
+        if answer.lower() in question.lower():
             messagebox.showerror("Error", "Question must not contain the answer!")
             return
 
 
-        if len(question) > 512:
-            messagebox.showerror("Error", "Question must be under 512 characters long.")
+        if len(question) > SMP_QUESTION_MAX_LEN:
+            messagebox.showerror("Error", f"Question must be under {SMP_QUESTION_MAX_LEN} characters long.")
 
 
         # This is just unacceptable, 4 characaters is the bare minimum.

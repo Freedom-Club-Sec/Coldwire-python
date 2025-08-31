@@ -33,7 +33,7 @@ def load_account_data(password = None) -> dict:
             
             blob = blob[:-32]
 
-            user_data = json.loads(crypto.decrypt_aes_gcm(password_kdf, blob[:12], blob[12:]))
+            user_data = json.loads(crypto.decrypt_chacha20poly1305(password_kdf, blob[:12], blob[12:]))
 
 
 
@@ -195,7 +195,7 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
         password_kdf, password_salt = crypto.derive_key_argon2id(password.encode())
 
 
-        nonce, ciphertext = crypto.encrypt_aes_gcm(password_kdf, json.dumps(user_data).encode("utf-8"))
+        nonce, ciphertext = crypto.encrypt_chacha20poly1305(password_kdf, json.dumps(user_data).encode("utf-8"))
         with open(ACCOUNT_FILE_PATH, "wb") as f:
             f.write(nonce + ciphertext + password_salt)
 
