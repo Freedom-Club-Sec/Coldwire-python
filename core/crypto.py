@@ -85,7 +85,7 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -
 
     Args:
         plaintext: Data to encrypt.
-        key: OTP key (≥ plaintext length + padding).
+        key: OTP key (>= plaintext length + padding).
         padding_limit: Max padding length.
 
     Returns:
@@ -105,7 +105,7 @@ def otp_decrypt_with_padding(ciphertext: bytes, key: bytes) -> bytes:
 
     Args:
         ciphertext: Ciphertext bytes.
-        key: OTP key (≥ ciphertext length).
+        key: OTP key (>= ciphertext length).
 
     Returns:
         Original plaintext bytes without padding.
@@ -175,7 +175,7 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
             shared_secrets += shared_secret
             cursor += cipher_size
 
-    return shared_secrets[:otp_pad_size]
+    return shared_secrets #[:otp_pad_size]
 
 def generate_shared_secrets(public_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
     """

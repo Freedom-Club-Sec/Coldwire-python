@@ -59,6 +59,12 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                     "our_nonce": None,
                     "contact_nonce": None,
                     "smp_step": None,
+                    "tmp_proof": None,
+                    "contact_kem_public_key": None,
+                    "our_kem_keys": {
+                        "private_key": None,
+                        "public_key": None
+                    }
                 },
                 "ephemeral_keys": {
                     "contact_public_keys": {

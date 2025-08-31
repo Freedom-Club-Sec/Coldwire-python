@@ -32,7 +32,10 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
         # logger.debug("Data received: %s", json.dumps(response, indent = 2)[:2000])
 
         for message in response["messages"]:
-            logger.debug("Received data message: %s", json.dumps(message, indent = 2)[:5000])
+            try:
+                logger.debug("Received data message: %s", json.dumps(message, indent = 2)[:5000])
+            except:
+                print("################# ", message)
 
             # Sanity check universal message fields
             if (not "sender" in message) or (not message["sender"].isdigit()) or (len(message["sender"]) != 16):

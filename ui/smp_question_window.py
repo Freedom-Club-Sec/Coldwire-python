@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 # from ui.utils import *
-from logic.smp import smp_step_2_answer_provided
+from logic.smp import smp_step_4_answer_provided
 
 class SMPQuestionWindow(tk.Toplevel):
     def __init__(self, master, contact_id, question):
@@ -51,6 +51,6 @@ class SMPQuestionWindow(tk.Toplevel):
             messagebox.showerror("Error", "You need to provide an answer.")
             return
 
-        smp_step_2_answer_provided(self.master.user_data, self.master.user_data_lock, self.contact_id, answer, self.master.ui_queue)
+        smp_step_4_answer_provided(self.master.user_data, self.master.user_data_lock, self.contact_id, answer, self.master.ui_queue)
 
         self.destroy()
