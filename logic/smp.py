@@ -46,9 +46,8 @@ from core.crypto import (
 from core.trad_crypto import (
         derive_key_argon2id, 
         sha3_512,
-        hkdf,
-        encrypt_chacha20poly1305,
-        decrypt_chacha20poly1305
+        encrypt_xchacha20poly1305,
+        decrypt_xchacha20poly1305
 )
 from base64 import b64encode, b64decode
 from core.constants import (
@@ -56,10 +55,11 @@ from core.constants import (
         SMP_PROOF_LENGTH,
         SMP_QUESTION_MAX_LEN,
         SMP_ANSWER_OUTPUT_LEN,
+        ARGON2_SALT_LEN,
         ML_KEM_1024_NAME,
         ML_KEM_1024_CT_LEN,
         ML_DSA_87_PK_LEN,
-        CHACHA20POLY1305_NONCE_LEN
+        XCHACHA20POLY1305_NONCE_LEN
 )
 import hashlib
 import secrets
@@ -134,13 +134,9 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, message: dict, 
     our_nonce = secrets.token_bytes(SMP_NONCE_LENGTH)
 
     key_ciphertext, chacha_key = encap_shared_secret(contact_kem_public_key, ML_KEM_1024_NAME)
-    chacha_key = hkdf(
-            chacha_key, 
-            salt = contact_id.encode("utf-8") + our_id.encode("utf-8"), 
-            info = b"Coldwire SMP encryption ChaCha20 key"
-        )
+    chacha_key = sha3_512(chacha_key)[:32]
 
-    ciphertext_nonce, ciphertext_blob = encrypt_chacha20poly1305(
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             chacha_key, 
             signing_public_key + our_nonce, 
             counter = 2
@@ -187,19 +183,14 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
     key_ciphertext = ciphertext_blob[:ML_KEM_1024_CT_LEN]
 
-    print(len(our_kem_private_key))
     chacha_key = decap_shared_secret(key_ciphertext, our_kem_private_key, ML_KEM_1024_NAME)
 
-    chacha_key = hkdf(
-            chacha_key, 
-            salt = our_id.encode("utf-8") + contact_id.encode("utf-8"), 
-            info = b"Coldwire SMP encryption ChaCha20 key"
-        )
+    chacha_key = sha3_512(chacha_key)[:32]
 
-    smp_plaintext = decrypt_chacha20poly1305(
+    smp_plaintext = decrypt_xchacha20poly1305(
             chacha_key, 
-            ciphertext_blob[ML_KEM_1024_CT_LEN : ML_KEM_1024_CT_LEN + CHACHA20POLY1305_NONCE_LEN],
-            ciphertext_blob[ML_KEM_1024_CT_LEN + CHACHA20POLY1305_NONCE_LEN:]
+            ciphertext_blob[ML_KEM_1024_CT_LEN : ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN],
+            ciphertext_blob[ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN:]
         )
 
     contact_signing_public_key = smp_plaintext[:ML_DSA_87_PK_LEN]
@@ -212,7 +203,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
     contact_key_fingerprint = sha3_512(contact_signing_public_key)
 
     # Derieve a high-entropy secret key from the low-entropy answer
-    argon2id_salt = sha3_512(contact_nonce + our_nonce)
+    argon2id_salt = sha3_512(contact_nonce + our_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
     # Compute our proof
@@ -221,7 +212,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
     logger.debug("Our proof of contact (%s) public-key fingerprint: %s", contact_id, our_proof)
     
-    ciphertext_nonce, ciphertext_blob = encrypt_chacha20poly1305(
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             chacha_key, 
             signing_public_key + our_nonce + our_proof + question.encode("utf-8"), 
             counter = 3
@@ -259,7 +250,7 @@ def smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui
         tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
 
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    smp_plaintext = decrypt_chacha20poly1305(tmp_key, ciphertext_blob[:CHACHA20POLY1305_NONCE_LEN], ciphertext_blob[CHACHA20POLY1305_NONCE_LEN:])
+    smp_plaintext = decrypt_xchacha20poly1305(tmp_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
     
     contact_signing_public_key = smp_plaintext[:ML_DSA_87_PK_LEN]
     contact_nonce = b64encode(smp_plaintext[ML_DSA_87_PK_LEN : SMP_NONCE_LENGTH + ML_DSA_87_PK_LEN]).decode()
@@ -306,7 +297,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_key_fingerprint = sha3_512(our_signing_public_key)
 
     # Derieve a high-entropy secret key from the low-entropy answer
-    argon2id_salt = sha3_512(our_nonce + contact_nonce)
+    argon2id_salt = sha3_512(our_nonce + contact_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
     # Compute our proof
@@ -330,7 +321,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_proof = contact_nonce + our_nonce + contact_key_fingerprint
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
-    ciphertext_nonce, ciphertext_blob = encrypt_chacha20poly1305(
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             tmp_key, 
             our_proof, 
             counter = 4
@@ -377,7 +368,7 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     our_key_fingerprint = sha3_512(our_signing_public_key + our_kem_public_key)
 
     # Derieve a high-entropy secret key from the low-entropy answer
-    argon2id_salt = sha3_512(contact_nonce + our_nonce)
+    argon2id_salt = sha3_512(contact_nonce + our_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
     # Compute the proof
@@ -385,7 +376,7 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    contact_proof = decrypt_chacha20poly1305(tmp_key, ciphertext_blob[:CHACHA20POLY1305_NONCE_LEN], ciphertext_blob[CHACHA20POLY1305_NONCE_LEN:])
+    contact_proof = decrypt_xchacha20poly1305(tmp_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
 
     
     logger.debug("SMP Proof sent to us: %s", contact_proof)

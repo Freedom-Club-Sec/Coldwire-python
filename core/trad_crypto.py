@@ -8,13 +8,10 @@ Provides wrappers for cryptographic primitives:
 These functions rely on the cryptography library and are intended for use within Coldwire's higher-level protocol logic.
 """
 
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from nacl import pwhash, bindings
 from core.constants import (
     OTP_PAD_SIZE,
-    CHACHA20POLY1305_NONCE_LEN,
+    XCHACHA20POLY1305_NONCE_LEN,
     ARGON2_ITERS,
     ARGON2_MEMORY,
     ARGON2_LANES,
@@ -41,15 +38,7 @@ def sha3_512(data: bytes) -> bytes:
     return h.digest()
 
 
-def hkdf(key: bytes, length: int = 32, salt: bytes = None, info: bytes = None) -> bytes:
-    return HKDF(
-        algorithm = hashes.SHA3_256(),
-        length = length,
-        salt = salt,
-        info = info,
-    ).derive(key)
-
-def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = ARGON2_SALT_LEN, output_length: int = ARGON2_OUTPUT_LEN) -> tuple[bytes, bytes]:
+def derive_key_argon2id(password: bytes, salt: bytes = None, output_length: int = ARGON2_OUTPUT_LEN) -> tuple[bytes, bytes]:
     """
     Derive a symmetric key from a password using Argon2id.
 
@@ -67,20 +56,18 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = 
         - salt: The salt used for derivation.
     """
     if salt is None:
-        salt = secrets.token_bytes(salt_length)
+        salt = secrets.token_bytes(ARGON2_SALT_LEN)
 
-    kdf = Argon2id(
-        salt=salt,
-        iterations=ARGON2_ITERS,
-        memory_cost=ARGON2_MEMORY,
-        length=output_length,
-        lanes=ARGON2_LANES
-    )
-    derived_key = kdf.derive(password)
-    return derived_key, salt
+    return pwhash.argon2id.kdf(
+        output_length, 
+        password,
+        salt,
+        opslimit = ARGON2_ITERS,
+        memlimit = ARGON2_MEMORY
+    ), salt
 
 
-def encrypt_chacha20poly1305(key: bytes, plaintext: bytes, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
+def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
     """
     Encrypt plaintext using ChaCha20Poly1305.
 
@@ -96,19 +83,19 @@ def encrypt_chacha20poly1305(key: bytes, plaintext: bytes, counter: int = None, 
         - nonce: The randomly generated AES-GCM nonce.
         - ciphertext: The encrypted data including the authentication tag.
     """
-    nonce = secrets.token_bytes(CHACHA20POLY1305_NONCE_LEN)
+    nonce = secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN)
     if counter is not None:
         if counter > counter_safety:
             raise ValueError("ChaCha counter has overflowen")
 
-        nonce = nonce[:CHACHA20POLY1305_NONCE_LEN - 4] + counter.to_bytes(4, "big")
+        nonce = nonce[:XCHACHA20POLY1305_NONCE_LEN - 4] + counter.to_bytes(4, "big")
 
-    chacha = ChaCha20Poly1305(key)
-    ciphertext = chacha.encrypt(nonce, plaintext, None)
+    ciphertext = bindings.crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, None, nonce, key) 
+
     return nonce, ciphertext
 
 
-def decrypt_chacha20poly1305(key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
+def decrypt_xchacha20poly1305(key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
     """
     Decrypt ciphertext using ChaCha20Poly1305.
 
@@ -122,7 +109,7 @@ def decrypt_chacha20poly1305(key: bytes, nonce: bytes, ciphertext: bytes) -> byt
     Returns:
         The decrypted plaintext bytes.
     """
-    chacha = ChaCha20Poly1305(key)
-    return chacha.decrypt(nonce, ciphertext, None)
+
+    return bindings.crypto_aead_xchacha20poly1305_ietf_decrypt(ciphertext, None, nonce, key)
 
 
