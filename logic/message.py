@@ -249,7 +249,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     if msgs_plaintext[0] == 0:
         logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
-        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * int(OTP_PAD_SIZE / 32)) + ML_DSA_87_SIGN_LEN + 1:
+        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + ML_DSA_87_SIGN_LEN + 1:
             logger.error("Contact (%s) gave us a message request with malformed strand plaintext length (%d)", contact_id, len(msgss_plaintext))
             return
 
@@ -270,15 +270,15 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
         # / 32 because shared secret is 32 bytes
         try:
-            contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ML_KEM_1024_CT_LEN * int(OTP_PAD_SIZE / 32)], our_kyber_key, ML_KEM_1024_NAME)
-        except:
-            logger.error("Failed to decrypt Kyber's shared_secrets, possible MiTM?")
+            contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ML_KEM_1024_CT_LEN * (OTP_PAD_SIZE // 32)], our_kyber_key, ML_KEM_1024_NAME)
+        except Exception as e:
+            logger.error("Failed to decrypt Kyber's shared_secrets from contact (%s), received error: %s", contact_id, str(e))
             return
 
         try:
-            contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ML_KEM_1024_CT_LEN * int(OTP_PAD_SIZE / 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
-        except:
-            logger.error("Failed to decrypt McEliece's shared_secrets, possible MiTM?")
+            contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ML_KEM_1024_CT_LEN * (OTP_PAD_SIZE // 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
+        except Exception as e:
+            logger.error("Failed to decrypt McEliece's shared_secrets from contact (%s), received error: %s", contact_id, str(e))
             return
         
         contact_pads = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
