@@ -300,9 +300,12 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_proof = contact_nonce + our_nonce + contact_key_fingerprint
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
+    our_strand_key     = secrets.token_bytes(32)
+    contact_strand_key = secrets.token_bytes(32)
+
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             tmp_key, 
-            our_proof, 
+            our_proof + our_strand_key + contact_strand_key, 
             counter = 4
         )
 
@@ -323,6 +326,8 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
     with user_data_lock:
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"] = answer
+        user_data["contacts"][contact_id]["our_strand_key"]     = our_strand_key
+        user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
 
 
 
@@ -355,9 +360,13 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    contact_proof = decrypt_xchacha20poly1305(tmp_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
+    smp_plaintext = decrypt_xchacha20poly1305(tmp_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
 
+    contact_proof      = smp_plaintext[:SMP_PROOF_LENGTH]
+    contact_strand_key = smp_plaintext[SMP_PROOF_LENGTH : SMP_PROOF_LENGTH + 32]
+    our_strand_key     = smp_plaintext[SMP_PROOF_LENGTH + 32:]
     
+
     logger.debug("SMP Proof sent to us: %s", contact_proof)
     logger.debug("Our compute message: %s", our_proof)
 
@@ -368,6 +377,11 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
         logger.warning("SMP Verification failed")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
+
+    with user_data_lock:
+        user_data["contacts"][contact_id]["our_strand_key"]     = our_strand_key
+        user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
+
 
 
 

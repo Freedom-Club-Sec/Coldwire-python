@@ -84,6 +84,14 @@ def load_account_data(password = None) -> dict:
         except TypeError:
             pass
 
+
+        try:
+            user_data["contacts"][contact_id]["our_strand_key"]     = b64decode(user_data["contacts"][contact_id]["our_strand_key"], validate=True)
+            user_data["contacts"][contact_id]["contact_strand_key"] = b64decode(user_data["contacts"][contact_id]["contact_strand_key"], validate=True)
+        except TypeError:
+            pass
+
+
         try:
             user_data["contacts"][contact_id]["our_pads"]["pads"] = b64decode(user_data["contacts"][contact_id]["our_pads"]["pads"], validate=True)
             user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = b64decode(user_data["contacts"][contact_id]["our_pads"]["hash_chain"], validate=True)
@@ -163,6 +171,14 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
             user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"] = b64encode(user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]).decode()
         except TypeError:
             pass
+
+
+        try:
+            user_data["contacts"][contact_id]["our_strand_key"]     = b64encode(user_data["contacts"][contact_id]["our_strand_key"]).decode()
+            user_data["contacts"][contact_id]["contact_strand_key"] = b64encode(user_data["contacts"][contact_id]["contact_strand_key"]).decode()
+        except TypeError:
+            pass
+
 
         try:
             user_data["contacts"][contact_id]["our_pads"]["pads"] = b64encode(user_data["contacts"][contact_id]["our_pads"]["pads"]).decode()

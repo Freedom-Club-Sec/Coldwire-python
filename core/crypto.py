@@ -156,7 +156,7 @@ def decap_shared_secret(ciphertext: bytes, private_key: bytes, algorithm: str):
     with oqs.KeyEncapsulation(algorithm, secret_key = private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
         return kem.decap_secret(ciphertext[:ALGOS_BUFFER_LIMITS[algorithm]["CT_LEN"]])
 
-def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
+def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm: str = None, size: int = OTP_PAD_SIZE):
     """
     Decrypts concatenated KEM ciphertexts to derive shared one-time pad.
 
@@ -164,7 +164,7 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
         ciphertext_blob: Concatenated Kyber ciphertexts.
         private_key: KEM private key.
         algorithm: KEM algorithm NIST name.
-        otp_pad_size: Desired OTP pad size in bytes.
+        size: Desired OTP pad size in bytes.
 
     Returns:
         Shared secret OTP pad bytes.
@@ -174,7 +174,7 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
     cursor         = 0
 
     with oqs.KeyEncapsulation(algorithm, secret_key=private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
-        while len(shared_secrets) < otp_pad_size:
+        while len(shared_secrets) < size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
             if len(ciphertext) != cipher_size:
                  raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete ({len(ciphertext)})")
@@ -185,14 +185,14 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
 
     return shared_secrets #[:otp_pad_size]
 
-def generate_shared_secrets(public_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
+def generate_shared_secrets(public_key: bytes, algorithm: str = None, size: int = OTP_PAD_SIZE):
     """
     Generates a one-time pad via `algorithm` encapsulation.
 
     Args:
         public_key: Recipient's public key.
         algorithm: KEM algorithm NIST name.
-        otp_pad_size: Desired OTP pad size in bytes.
+        size: Desired OTP pad size in bytes.
 
     Returns:
         (ciphertexts_blob, shared_secrets) for transport & encryption.
@@ -201,12 +201,12 @@ def generate_shared_secrets(public_key: bytes, algorithm: str = None, otp_pad_si
     ciphertexts_blob = b''
 
     with oqs.KeyEncapsulation(algorithm) as kem:
-        while len(shared_secrets) < otp_pad_size:
+        while len(shared_secrets) < size:
             ciphertext, shared_secret = kem.encap_secret(public_key[:ALGOS_BUFFER_LIMITS[algorithm]["PK_LEN"]])
             ciphertexts_blob += ciphertext
             shared_secrets   += shared_secret
 
-    return ciphertexts_blob, shared_secrets[:otp_pad_size]
+    return ciphertexts_blob, shared_secrets # [:otp_pad_size]
 
 def random_number_range(a: int, b: int) -> int:
     """
