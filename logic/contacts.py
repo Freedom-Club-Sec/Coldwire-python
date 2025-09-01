@@ -60,6 +60,7 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                     "contact_nonce": None,
                     "smp_step": None,
                     "tmp_proof": None,
+                    "tmp_key": None,
                     "contact_kem_public_key": None,
                     "our_kem_keys": {
                         "private_key": None,

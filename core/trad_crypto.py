@@ -8,11 +8,10 @@ Provides wrappers for cryptographic primitives:
 These functions rely on the cryptography library and are intended for use within Coldwire's higher-level protocol logic.
 """
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
+from nacl import pwhash, bindings
 from core.constants import (
     OTP_PAD_SIZE,
-    AES_GCM_NONCE_LEN,
+    XCHACHA20POLY1305_NONCE_LEN,
     ARGON2_ITERS,
     ARGON2_MEMORY,
     ARGON2_LANES,
@@ -39,7 +38,7 @@ def sha3_512(data: bytes) -> bytes:
     return h.digest()
 
 
-def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = ARGON2_SALT_LEN, output_length: int = ARGON2_OUTPUT_LEN) -> tuple[bytes, bytes]:
+def derive_key_argon2id(password: bytes, salt: bytes = None, output_length: int = ARGON2_OUTPUT_LEN) -> tuple[bytes, bytes]:
     """
     Derive a symmetric key from a password using Argon2id.
 
@@ -57,55 +56,60 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, salt_length: int = 
         - salt: The salt used for derivation.
     """
     if salt is None:
-        salt = secrets.token_bytes(salt_length)
+        salt = secrets.token_bytes(ARGON2_SALT_LEN)
 
-    kdf = Argon2id(
-        salt=salt,
-        iterations=ARGON2_ITERS,
-        memory_cost=ARGON2_MEMORY,
-        length=output_length,
-        lanes=ARGON2_LANES
-    )
-    derived_key = kdf.derive(password)
-    return derived_key, salt
+    return pwhash.argon2id.kdf(
+        output_length, 
+        password,
+        salt,
+        opslimit = ARGON2_ITERS,
+        memlimit = ARGON2_MEMORY
+    ), salt
 
 
-def encrypt_aes_gcm(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
+def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
     """
-    Encrypt plaintext using AES-256 in GCM mode.
+    Encrypt plaintext using ChaCha20Poly1305.
 
     A random nonce is generated for each encryption.
 
     Args:
-        key: A 32-byte AES key.
+        key: A 32-byte ChaCha20Poly1305 key.
         plaintext: Data to encrypt.
+        counter: an (optional) number to add to nonce
 
     Returns:
         A tuple (nonce, ciphertext) where:
         - nonce: The randomly generated AES-GCM nonce.
         - ciphertext: The encrypted data including the authentication tag.
     """
-    nonce = secrets.token_bytes(AES_GCM_NONCE_LEN)
-    aes_gcm = AESGCM(key)
-    ciphertext = aes_gcm.encrypt(nonce, plaintext, None)
+    nonce = secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN)
+    if counter is not None:
+        if counter > counter_safety:
+            raise ValueError("ChaCha counter has overflowen")
+
+        nonce = nonce[:XCHACHA20POLY1305_NONCE_LEN - 4] + counter.to_bytes(4, "big")
+
+    ciphertext = bindings.crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, None, nonce, key) 
+
     return nonce, ciphertext
 
 
-def decrypt_aes_gcm(key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
+def decrypt_xchacha20poly1305(key: bytes, nonce: bytes, ciphertext: bytes) -> bytes:
     """
-    Decrypt ciphertext using AES-256 in GCM mode.
+    Decrypt ciphertext using ChaCha20Poly1305.
 
     Raises an exception if authentication fails.
 
     Args:
-        key: The 32-byte AES key used for encryption.
+        key: The 32-byte ChaCha20Poly1305 key used for encryption.
         nonce: The nonce used during encryption.
         ciphertext: The encrypted data including the authentication tag.
 
     Returns:
         The decrypted plaintext bytes.
     """
-    aes_gcm = AESGCM(key)
-    return aes_gcm.decrypt(nonce, ciphertext, None)
+
+    return bindings.crypto_aead_xchacha20poly1305_ietf_decrypt(ciphertext, None, nonce, key)
 
 

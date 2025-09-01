@@ -148,6 +148,14 @@ def generate_kem_keys(algorithm: str):
         private_key = kem.export_secret_key()
         return private_key, public_key
 
+def encap_shared_secret(public_key: bytes, algorithm: str):
+    with oqs.KeyEncapsulation(algorithm) as kem:
+        return kem.encap_secret(public_key[:ALGOS_BUFFER_LIMITS[algorithm]["PK_LEN"]])
+ 
+def decap_shared_secret(ciphertext: bytes, private_key: bytes, algorithm: str):
+    with oqs.KeyEncapsulation(algorithm, secret_key = private_key[:ALGOS_BUFFER_LIMITS[algorithm]["SK_LEN"]]) as kem:
+        return kem.decap_secret(ciphertext[:ALGOS_BUFFER_LIMITS[algorithm]["CT_LEN"]])
+
 def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm: str = None, otp_pad_size: int = OTP_PAD_SIZE):
     """
     Decrypts concatenated KEM ciphertexts to derive shared one-time pad.

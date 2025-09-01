@@ -12,7 +12,7 @@ LONGPOLL_MAX  = 30
 # crypto parameters (bytes)
 CHALLENGE_LEN     = 11264
 
-AES_GCM_NONCE_LEN = 12
+XCHACHA20POLY1305_NONCE_LEN = 24
 
 OTP_PAD_SIZE       = 11264
 OTP_PADDING_LENGTH = 2
@@ -71,5 +71,5 @@ ALGOS_BUFFER_LIMITS   = {
 ARGON2_MEMORY      = 256 * 1024   # MB
 ARGON2_ITERS       = 3
 ARGON2_OUTPUT_LEN  = 32           # bytes
-ARGON2_SALT_LEN    = 32           # bytes
+ARGON2_SALT_LEN    = 16           # bytes (Must be always 16 for interoperability with libsodium.)
 ARGON2_LANES       = 4

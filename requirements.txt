@@ -1,1 +1,1 @@
-cryptography
+pynacl
