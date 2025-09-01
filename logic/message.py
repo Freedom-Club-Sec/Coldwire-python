@@ -65,12 +65,12 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
+            b"\x00" + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
         )
 
 
     try:
-        http_request(f"{server_url}/messages/send_pads", "POST", payload={
+        http_request(f"{server_url}/messages/send", "POST", payload={
                 "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
                 "recipient": contact_id
             }, auth_token=auth_token)
@@ -209,23 +209,35 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     """
     contact_id = message["sender"]
 
-    if (not (contact_id in user_data_copied["contacts"])):
-        logger.warning("Contact is missing, maybe we (or they) are not synced? Not sure, but we will ignore this Message request for now")
-        logger.debug("Our contacts: %s", json.dumps(user_data_copied["contacts"], indent=2))
+    if contact_id not in user_data_copied["contacts"]:
+        logger.warning("Contact (%s) is missing! Skipping message", contact_id)
+        logger.debug("Our contacts: %s", str(user_data_copied["contacts"]))
         return
 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
-        logger.warning("Contact long-term signing key is not verified.. it is possible that this is a MiTM attack, we ignoring this message for now.")
+        logger.warning("Contact (%s) is not verified! Skipping message", contact_id)
         return
 
 
     contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
 
     if contact_public_key is None:
-        logger.warning("Contact per-contact Dilithium 5 public key is missing.. skipping message")
+        logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
         return
 
+    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
+    
+    # Everything from here is not validated by server
+    try:
+        pfs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
+    except Exception as e:
+        logger.error("Failed to decrypt `ciphertext_blob` from contact (%s) with error: %s", contact_id, str(e))
+        return
+
+    if (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) or len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
+        logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
+      
 
     logger.debug("Received a new message of type: %s", message["msg_type"])
 
