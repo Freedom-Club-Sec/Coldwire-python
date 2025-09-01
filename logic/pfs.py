@@ -202,27 +202,24 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
-        logger.error("Contact is not saved., maybe we (or they) are not synced? Ignoring this PFS message.")
-        logger.debug("Our saved contacts: %s", str(user_data_copied["contacts"]))
+        logger.error("Contact (%s) is not saved! Skipping message", contact_id)
+        logger.debug("Our contacts: %s", str(user_data_copied["contacts"]))
         return
-
-    # Contact's per-contact signing public-key
-    contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
-    
-    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
-
-    if not contact_lt_public_key:
-        logger.error("Contact long-term signing key is missing... 0 clue how we reached here, but we aint continuing..")
-        return 
-
-    if not contact_strand_key:
-        logger.error("Contact strand key key is missing... 0 clue how we reached here, but we aint continuing..")
-        return 
-
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
         logger.error("Contact long-term signing key is not verified! We will ignore this PFS message.")
         return
+
+    contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
+    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
+
+    if not contact_lt_public_key:
+        logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
+        return 
+
+    if not contact_strand_key:
+        logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
+        return 
 
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
     

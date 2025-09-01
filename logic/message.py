@@ -29,8 +29,11 @@ from core.constants import (
     OTP_PADDING_LIMIT,
     OTP_PADDING_LENGTH,
     ML_KEM_1024_NAME,
-    CLASSIC_MCELIECE_8_F_NAME,
+    ML_KEM_1024_CT_LEN,
     ML_DSA_87_NAME,  
+    ML_DSA_87_SIGN_LEN,
+    CLASSIC_MCELIECE_8_F_NAME,
+    CLASSIC_MCELIECE_8_F_CT_LEN
 )
 from base64 import b64decode, b64encode
 import json
@@ -210,7 +213,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
-        logger.warning("Contact (%s) is missing! Skipping message", contact_id)
+        logger.error("Contact (%s) is not saved! Skipping message", contact_id)
         logger.debug("Our contacts: %s", str(user_data_copied["contacts"]))
         return
 
@@ -221,33 +224,45 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
 
     contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
+    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
 
     if contact_public_key is None:
         logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
         return
 
+    if not contact_strand_key:
+        logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
+        return 
+
+
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
     
     # Everything from here is not validated by server
     try:
-        pfs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
+        msgs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
     except Exception as e:
         logger.error("Failed to decrypt `ciphertext_blob` from contact (%s) with error: %s", contact_id, str(e))
         return
 
-    if (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) or len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
-        logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
-      
+    # b"\x00" + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
+   
+    if msgs_plaintext[0] == 0
+        logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
-    logger.debug("Received a new message of type: %s", message["msg_type"])
+        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * int(OTP_PAD_SIZE / 32)) + ML_DSA_87_SIGN_LEN + 1:
+            logger.error("Contact (%s) gave us a message request with malformed strand plaintext length (%d)", contact_id, len(msgss_plaintext))
+            return
 
-    if message["msg_type"] == "new_otp_batch":
-        otp_hashchain_signature  = b64decode(message["otp_hashchain_signature"], validate=True)
-        otp_hashchain_ciphertext = b64decode(message["otp_hashchain_ciphertext"], validate=True)
+        otp_hashchain_signature  = msgs_plaintext[:ML_DSA_87_SIGN_LEN]
+        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN:]
 
-        valid_signature = verify_signature(ML_DSA_87_NAME, otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
-        if not valid_signature:
-            logger.debug("Invalid OTP_hashchain_ciphertext signature.. possible MiTM ?")
+        try:
+            valid_signature = verify_signature(ML_DSA_87_NAME, otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
+            if not valid_signature:
+                logger.error("Invalid `otp_hashchain_ciphertext` signature from contact (%s)! This might be a MiTM attack.", contact_id)
+                return
+        except Exception as e:
+            logger.error("Contact (%s) gave us a messages request with malformed strand signature which generated this error: %s", contact_id, str(e))
             return
 
         our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
@@ -255,13 +270,13 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
         # / 32 because shared secret is 32 bytes
         try:
-            contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["CT_LEN"] * int(OTP_PAD_SIZE / 32)], our_kyber_key, ML_KEM_1024_NAME)
+            contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ML_KEM_1024_CT_LEN * int(OTP_PAD_SIZE / 32)], our_kyber_key, ML_KEM_1024_NAME)
         except:
             logger.error("Failed to decrypt Kyber's shared_secrets, possible MiTM?")
             return
 
         try:
-            contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["CT_LEN"] * int(OTP_PAD_SIZE / 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
+            contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ML_KEM_1024_CT_LEN * int(OTP_PAD_SIZE / 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
         except:
             logger.error("Failed to decrypt McEliece's shared_secrets, possible MiTM?")
             return
