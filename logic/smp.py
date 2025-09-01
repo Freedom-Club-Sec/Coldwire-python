@@ -4,32 +4,11 @@
     The socialist millionaire problem
     A variant of Yao's millionaire problem
 
-    Guranteed verification certainity IF the answer has enough entropy (for the duration of the process.)
+    Guaranteed verification certainity IF the answer has enough entropy (for the duration of the process.)
 
     This is not **strictly** a SMP implementation, but it is a simplified, human-language variant
     we made for verifying a contact's long-term public-key.
 
-    Our implementation is inspired by Off-The-Record Messaging's SMP implementation.
-
-
-    Query server for new SMP verification messages
-    Check which step we are on
-    Act accordingly
-
-    Step 1 is initiated by the contact, whom sets a question and an answer, then sends the question to our user
-    We assume user starts at step 2, step 1 is done by the contact who initiated the verification process  
-    Step 2, we ask our user to provide an answer to the contact's question
-    Then we compute a proof for our version of the contact's public-key fingerprint
-    Step 3, the contact receives our proof and tries to compuate the same proof
-    if it matches, he marks us as verified, otherwise, a failure notice is sent and both user and contact SMP state is deleted
-    After it matches, contact compuates a proof for his version of our public-key fingerprint
-    And sends it over
-    Step 4 user receive this proof and try to compute an identical one
-    If we succeed, the verification process is complete and we mark contact's as verified
-   
-    This provides a strong guarantee of authenticity and integrity for our long-term public keys 
-    IF the answer has enough entropy to be uncrackable *just* for the duration of the process
-       
 """
 
 from core.requests import http_request
@@ -202,7 +181,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
     contact_key_fingerprint = sha3_512(contact_signing_public_key)
 
-    # Derieve a high-entropy secret key from the low-entropy answer
+    # Derive a high-entropy secret key from the low-entropy answer
     argon2id_salt = sha3_512(contact_nonce + our_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
@@ -296,7 +275,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
     our_key_fingerprint = sha3_512(our_signing_public_key)
 
-    # Derieve a high-entropy secret key from the low-entropy answer
+    # Derive a high-entropy secret key from the low-entropy answer
     argon2id_salt = sha3_512(our_nonce + contact_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
@@ -367,7 +346,7 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
     our_key_fingerprint = sha3_512(our_signing_public_key + our_kem_public_key)
 
-    # Derieve a high-entropy secret key from the low-entropy answer
+    # Derive a high-entropy secret key from the low-entropy answer
     argon2id_salt = sha3_512(contact_nonce + our_nonce)[:ARGON2_SALT_LEN]
     answer_secret, _ = derive_key_argon2id(answer.encode("utf-8"), salt = argon2id_salt, output_length = SMP_ANSWER_OUTPUT_LEN)
 
