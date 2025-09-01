@@ -246,7 +246,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
     # b"\x00" + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
    
-    if msgs_plaintext[0] == 0
+    if msgs_plaintext[0] == 0:
         logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
         if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * int(OTP_PAD_SIZE / 32)) + ML_DSA_87_SIGN_LEN + 1:

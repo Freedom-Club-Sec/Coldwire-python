@@ -19,7 +19,6 @@ from core.crypto import (
     random_number_range
 )
 from core.constants import (
-    ALGOS_BUFFER_LIMITS,
     ML_KEM_1024_NAME,
     ML_DSA_87_NAME,
     ML_KEM_1024_PK_LEN,
@@ -262,12 +261,12 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
             logger.error("Contact keys hash chain does not match our computed hash chain! Skipping this PFS message...")
             return
 
-    contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN]
+    contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN]
 
     if len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
 
-        contact_mceliece_public_key = contact_publickeys_hashchain[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN:]
+        contact_mceliece_public_key = contact_publickeys_hashchain[ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:]
         with user_data_lock:
             user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = contact_mceliece_public_key
 
