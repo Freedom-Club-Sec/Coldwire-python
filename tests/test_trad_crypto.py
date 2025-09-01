@@ -1,13 +1,13 @@
 # tests/test_trad_crypto.py
 """
-    Tests for AES-256 GCM encryption/decryption and Argon2id key derivation.
-    Focus: Correctness of encryption/decryption flow and tamper detection.
+    Tests for XChaCha20Poly1305 encryption & decryption and Argon2id key derivation.
+    Focus: Correctness of encryption & decryption flow and tamper detection.
 """
 
 import pytest
 from core.trad_crypto import (
-        encrypt_aes_gcm,
-        decrypt_aes_gcm,
+        encrypt_xchacha20poly1305,
+        decrypt_xchacha20poly1305,
         derive_key_argon2id
 )
 
@@ -23,12 +23,12 @@ def test_aes_encrypt_decrypt():
     assert key != password, "Derived key should not match plaintext password"
 
     # Encrypt plaintext using AES-GCM
-    nonce, ciphertext = encrypt_aes_gcm(key, data)
+    nonce, ciphertext = encrypt_xchacha20poly1305(key, data)
     assert nonce != ciphertext, "Nonce and ciphertext should not be equal"
     assert ciphertext != data, "Ciphertext should differ from plaintext"
 
     # Decrypt ciphertext and verify correctness
-    plaintext = decrypt_aes_gcm(key, nonce, ciphertext)
+    plaintext = decrypt_xchacha20poly1305(key, nonce, ciphertext)
     assert plaintext == data, "Decrypted plaintext does not match original"
 
     # Tampering test: Modify ciphertext and expect decryption failure
