@@ -71,8 +71,6 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     auth_token       = user_data_copied["token"]
     
     our_strand_key     = user_data_copied["contacts"][contact_id]["our_strand_key"]
-    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
-
 
     rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
     rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
@@ -110,15 +108,11 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
             publickeys_hashchain_signature + publickeys_hashchain
         )
 
-    payload = {
-
-            "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
-            "recipient"      : contact_id,
-        }
-
-
     try:
-        http_request(f"{server_url}/pfs/send_keys", "POST", payload=payload, auth_token=auth_token)
+        http_request(f"{server_url}/pfs/send_keys", "POST", payload={
+                "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
+                "recipient"      : contact_id,
+            }, auth_token=auth_token)
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our ephemeral keys to the server"})
         return

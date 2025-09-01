@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue) -> bool:
     """
-        Generates a new hash-chained OTP batch, signs it with Dilithium, and sends it to the server.
+        Generates a new OTP batch, signs it with ML-DSA-87, encrypt everything and send it to the server.
         Updates local pad and hash chain state upon success.
         Returns:
             bool: True if successful, False otherwise.
@@ -54,21 +54,26 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
         contact_mceliece_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]
         our_lt_private_key          = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
  
+        our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
+
 
 
     kyber_ciphertext_blob   , kyber_shared_secrets    = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
     mceliece_ciphertext_blob, mceliece_shared_secrets = generate_shared_secrets(contact_mceliece_public_key, CLASSIC_MCELIECE_8_F_NAME)
 
     otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob + mceliece_ciphertext_blob, our_lt_private_key)
-    otp_batch_signature = b64encode(otp_batch_signature).decode()
 
-    payload = {
-            "otp_hashchain_ciphertext": b64encode(kyber_ciphertext_blob + mceliece_ciphertext_blob).decode(),
-            "otp_hashchain_signature": otp_batch_signature,
-            "recipient": contact_id
-        }
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+            our_strand_key, 
+            otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
+        )
+
+
     try:
-        http_request(f"{server_url}/messages/send_pads", "POST", payload=payload, auth_token=auth_token)
+        http_request(f"{server_url}/messages/send_pads", "POST", payload={
+                "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
+                "recipient": contact_id
+            }, auth_token=auth_token)
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our one-time-pads key batch to the server"})
         return False

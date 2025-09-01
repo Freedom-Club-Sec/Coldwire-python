@@ -74,7 +74,7 @@ def generate_sign_keys(algorithm: str = ML_DSA_87_NAME):
         private_key = signer.export_secret_key()
         return private_key, public_key
 
-def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -> bytes:
+def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int = OTP_PADDING_LENGTH) -> bytes:
     """
     Encrypts plaintext using a one-time pad with random padding.
 
@@ -91,8 +91,7 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes, padding_limit: int) -
     Returns:
         Ciphertext bytes.
     """
-    if padding_limit > ((2 ** (8 * OTP_PADDING_LENGTH)) - 1):
-        raise ValueError("Padding too large")
+
 
     plaintext_padding = secrets.token_bytes(padding_limit)
     padding_length_bytes = len(plaintext_padding).to_bytes(OTP_PADDING_LENGTH, "big")
