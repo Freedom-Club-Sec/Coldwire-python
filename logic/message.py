@@ -31,7 +31,6 @@ from core.constants import (
     MESSAGE_HASH_CHAIN_LEN,
     OTP_MAX_BUCKET,
     OTP_PAD_SIZE,
-    OTP_SIZE_LENGTH,
     ML_KEM_1024_NAME,
     ML_KEM_1024_CT_LEN,
     ML_DSA_87_NAME,  
@@ -288,13 +287,13 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         try:
             contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ML_KEM_1024_CT_LEN * (OTP_PAD_SIZE // 32)], our_kyber_key, ML_KEM_1024_NAME)
         except Exception as e:
-            logger.error("Failed to decrypt Kyber's shared_secrets from contact (%s), received error: %s", contact_id, str(e))
+            logger.error("Failed to decrypt ML-KEM-1024 ciphertext from contact (%s), received error: %s", contact_id, str(e))
             return
 
         try:
             contact_mceliece_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[ML_KEM_1024_CT_LEN * (OTP_PAD_SIZE // 32):], our_mceliece_key, CLASSIC_MCELIECE_8_F_NAME)
         except Exception as e:
-            logger.error("Failed to decrypt McEliece's shared_secrets from contact (%s), received error: %s", contact_id, str(e))
+            logger.error("Failed to decrypt Classic-McEliece8192128's ciphertext from contact (%s), received error: %s", contact_id, str(e))
             return
         
         contact_pads, _ = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
