@@ -62,7 +62,7 @@ def verify_signature(algorithm: str, message: bytes, signature: bytes, public_ke
     with oqs.Signature(algorithm) as verifier:
         return verifier.verify(message, signature[:ALGOS_BUFFER_LIMITS[algorithm]["SIGN_LEN"]], public_key[:ALGOS_BUFFER_LIMITS[algorithm]["PK_LEN"]])
 
-def generate_sign_keys(algorithm: str = ML_DSA_87_NAME) Tuple[bytes, bytes]:
+def generate_sign_keys(algorithm: str = ML_DSA_87_NAME) -> Tuple[bytes, bytes]:
     """
     Generates a new post-quantum signature keypair.
 
@@ -77,7 +77,7 @@ def generate_sign_keys(algorithm: str = ML_DSA_87_NAME) Tuple[bytes, bytes]:
         private_key = signer.export_secret_key()
         return private_key, public_key
 
-def otp_encrypt_with_padding(plaintext: bytes, key: bytes) -> bytes:
+def otp_encrypt_with_padding(plaintext: bytes, key: bytes) -> Tuple[bytes, bytes]:
     """
     Encrypts plaintext using a one-time pad with random or bucket padding.
 
@@ -98,7 +98,7 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes) -> bytes:
     if len(plaintext) < OTP_MAX_BUCKET:
         pad_len = OTP_MAX_BUCKET - len(plaintext)
     else:
-        pad_len = secrets.randbelow(OTP_MAX_RANDOM_PAD)
+        pad_len = secrets.randbelow(OTP_MAX_RANDOM_PAD + 1)
     
     padding = secrets.token_bytes(pad_len)
 
@@ -107,7 +107,7 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes) -> bytes:
     padded_plaintext = plaintext_length_bytes + plaintext + padding
 
     if len(padded_plaintext) > len(key):
-        raise ValueError("Plaintext is larger than key!")
+        raise ValueError("Padded plaintext is larger than key!")
 
     return one_time_pad(padded_plaintext, key)
 
@@ -122,7 +122,7 @@ def otp_decrypt_with_padding(ciphertext: bytes, key: bytes) -> bytes:
     Returns:
         Original plaintext bytes without padding.
     """
-    plaintext_with_padding = one_time_pad(ciphertext, key)
+    plaintext_with_padding, _ = one_time_pad(ciphertext, key)
 
     plaintext_length = int.from_bytes(plaintext_with_padding[:OTP_SIZE_LENGTH], "big")
 
@@ -147,7 +147,9 @@ def one_time_pad(plaintext: bytes, key: bytes) -> bytes:
     for index, plain_byte in enumerate(plaintext):
         key_byte = key[index]
         otpd_plaintext += bytes([plain_byte ^ key_byte])
-    return otpd_plaintext
+
+    key = key[len(otpd_plaintext):]
+    return otpd_plaintext, key
 
 def generate_kem_keys(algorithm: str) -> Tuple[bytes, bytes]:
     """
