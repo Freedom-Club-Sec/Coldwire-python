@@ -19,14 +19,21 @@ from core.crypto import (
     random_number_range
 )
 from core.constants import (
-    ALGOS_BUFFER_LIMITS,
     ML_KEM_1024_NAME,
     ML_DSA_87_NAME,
+    ML_KEM_1024_PK_LEN,
+    ML_DSA_87_SIGN_LEN,
+    XCHACHA20POLY1305_NONCE_LEN,
     CLASSIC_MCELIECE_8_F_NAME,
+    CLASSIC_MCELIECE_8_F_PK_LEN,
     CLASSIC_MCELIECE_8_F_ROTATE_AT,
     KEYS_HASH_CHAIN_LEN
 )
-from core.trad_crypto import sha3_512
+from core.trad_crypto import (
+        sha3_512,
+        encrypt_xchacha20poly1305,
+        decrypt_xchacha20poly1305
+)
 from base64 import b64encode, b64decode
 import secrets
 import copy
@@ -40,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, contact_id: str, ui_queue: queue.Queue) -> None:
     """
-    Generate and send fresh ephemeral keys to a contact.
+    Generate, encrypt, and send fresh ephemeral keys to a contact.
 
     - Maintains a per-contact hash chain for signing key material.
     - Generates new Kyber1024 keys every call.
@@ -61,6 +68,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
  
     server_url       = user_data_copied["server_url"]
     auth_token       = user_data_copied["token"]
+    
+    our_strand_key     = user_data_copied["contacts"][contact_id]["our_strand_key"]
 
     rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
     rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
@@ -83,25 +92,26 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     kyber_private_key, kyber_public_key = generate_kem_keys(ML_KEM_1024_NAME)
     publickeys_hashchain = our_hash_chain + kyber_public_key
 
-    pfs_type = "partial"
+    rotate_mceliece = False
     if (rotate_at == rotation_counter) or (user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] is None):
+        # Generate Classic McEliece 8192128f keys
         mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_F_NAME)
         publickeys_hashchain += mceliece_public_key
-        pfs_type = "full"
+        rotate_mceliece = True
 
     # Sign them with our per-contact long-term private key
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
     
-    payload = {
-            "publickeys_hashchain": b64encode(publickeys_hashchain).decode(),
-            "hashchain_signature" : b64encode(publickeys_hashchain_signature).decode(),
-            "recipient"           : contact_id,
-            "pfs_type"            : pfs_type
-        }
-
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+            our_strand_key, 
+            publickeys_hashchain_signature + publickeys_hashchain
+        )
 
     try:
-        http_request(f"{server_url}/pfs/send_keys", "POST", payload=payload, auth_token=auth_token)
+        http_request(f"{server_url}/pfs/send_keys", "POST", payload={
+                "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
+                "recipient"      : contact_id,
+            }, auth_token=auth_token)
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our ephemeral keys to the server"})
         return
@@ -115,7 +125,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
                 "public_key": kyber_public_key
             }
         
-        if pfs_type == "full":
+        if rotate_mceliece:
             user_data["tmp"]["new_code_kem_keys"][contact_id] = {
                 "private_key": mceliece_private_key,
                 "public_key": mceliece_public_key
@@ -191,34 +201,52 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
-        logger.error("Contact is not saved., maybe we (or they) are not synced? Ignoring this PFS message.")
-        logger.debug("Our saved contacts: %s", str(user_data_copied["contacts"]))
+        logger.error("Contact (%s) is not saved! Skipping message", contact_id)
+        logger.debug("Our contacts: %s", str(user_data_copied["contacts"]))
         return
-
-    # Contact's per-contact signing public-key
-    contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
-
-    if not contact_lt_public_key:
-        logger.error("Contact long-term signing key is missing... 0 clue how we reached here, but we aint continuing..")
-        return 
 
     if not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["verified"]:
         logger.error("Contact long-term signing key is not verified! We will ignore this PFS message.")
         return
 
-    contact_hashchain_signature = b64decode(message["hashchain_signature"], validate=True)
-    contact_publickeys_hashchain = b64decode(message["publickeys_hashchain"], validate=True)
+    contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
+    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
 
-    valid_signature = verify_signature(ML_DSA_87_NAME, contact_publickeys_hashchain, contact_hashchain_signature, contact_lt_public_key)
-    if not valid_signature:
-        logger.error("Invalid ephemeral public-key + hashchain signature from contact (%s)", contact_id)
+    if not contact_lt_public_key:
+        logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
+        return 
+
+    if not contact_strand_key:
+        logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
+        return 
+
+    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
+    
+    # Everything from here is not validated by server
+    try:
+        pfs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
+    except Exception as e:
+        logger.error("Failed to decrypt `ciphertext_blob` from contact (%s) with error: %s", contact_id, str(e))
         return
 
-    if message["pfs_type"] not in ["full", "partial"]:
-        logger.error("contact (%s) sent message of unknown pfs_type (%s)", contact_id, message["pfs_type"])
+    if (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) or len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
+        logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
         return
 
-    contact_hash_chain = contact_publickeys_hashchain[:KEYS_HASH_CHAIN_LEN]
+    contact_hashchain_signature  = pfs_plaintext[:ML_DSA_87_SIGN_LEN]
+    contact_publickeys_hashchain = pfs_plaintext[ML_DSA_87_SIGN_LEN:]
+
+    contact_hash_chain           = contact_publickeys_hashchain[:KEYS_HASH_CHAIN_LEN]
+
+    try:
+        valid_signature = verify_signature(ML_DSA_87_NAME, contact_publickeys_hashchain, contact_hashchain_signature, contact_lt_public_key)
+        if not valid_signature:
+            logger.error("Invalid ephemeral public-key + hashchain signature from contact (%s)", contact_id)
+            return
+    except Exception as e:
+        logger.error("Contact (%s) gave us a PFS request with malformed strand signature which generated this error: %s", contact_id, str(e))
+        return
+
 
     # If we do not have a hashchain for the contact, we don't need to compute the chain, just save.
     if not user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"]:
@@ -233,15 +261,16 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
             logger.error("Contact keys hash chain does not match our computed hash chain! Skipping this PFS message...")
             return
 
-    contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN]
-    if message["pfs_type"] == "full":
+    contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN]
+
+    if len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
 
-        contact_mceliece_public_key = contact_publickeys_hashchain[ALGOS_BUFFER_LIMITS[ML_KEM_1024_NAME]["PK_LEN"] + KEYS_HASH_CHAIN_LEN:]
+        contact_mceliece_public_key = contact_publickeys_hashchain[ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:]
         with user_data_lock:
             user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = contact_mceliece_public_key
 
-    elif message["pfs_type"] == "partial":
+    elif len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber keys", contact_id)
 
     with user_data_lock:

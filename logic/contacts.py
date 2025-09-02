@@ -86,6 +86,10 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
 
                     }
                 },
+                "our_strand_key": None,
+                "our_next_strand_nonce": None,
+                "contact_next_strand_key": None,
+                "contact_strand_nonce": None,
                 "our_pads": {
                     "hash_chain": None,
                     "pads": None

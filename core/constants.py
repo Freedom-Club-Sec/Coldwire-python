@@ -15,8 +15,9 @@ CHALLENGE_LEN     = 11264
 XCHACHA20POLY1305_NONCE_LEN = 24
 
 OTP_PAD_SIZE       = 11264
-OTP_PADDING_LENGTH = 2
-OTP_PADDING_LIMIT  = 1024
+OTP_MAX_BUCKET     = 64
+OTP_MAX_RANDOM_PAD = 16 
+OTP_SIZE_LENGTH    = 2
 
 SMP_NONCE_LENGTH      = 64
 SMP_PROOF_LENGTH      = 64
@@ -71,5 +72,5 @@ ALGOS_BUFFER_LIMITS   = {
 ARGON2_MEMORY      = 256 * 1024   # MB
 ARGON2_ITERS       = 3
 ARGON2_OUTPUT_LEN  = 32           # bytes
-ARGON2_SALT_LEN    = 16           # bytes (Must be always 16 for interoperability with libsodium.)
+ARGON2_SALT_LEN    = 16           # bytes (Must be always 16 for interoperability with implementations using libsodium.)
 ARGON2_LANES       = 4
