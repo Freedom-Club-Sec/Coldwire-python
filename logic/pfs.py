@@ -94,14 +94,14 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
     rotate_mceliece = False
     if (rotate_at == rotation_counter) or (user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] is None):
+        # Generate Classic McEliece 8192128f keys
         mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_F_NAME)
         publickeys_hashchain += mceliece_public_key
         rotate_mceliece = True
 
     # Sign them with our per-contact long-term private key
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
-
-
+    
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
             publickeys_hashchain_signature + publickeys_hashchain
