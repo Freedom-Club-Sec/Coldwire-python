@@ -23,11 +23,10 @@ from core.crypto import (
     otp_encrypt_with_padding,
     otp_decrypt_with_padding
 )
-from core.constants import (
-    ALGOS_BUFFER_LIMITS,
+from core.constants import ( 
+    KEYS_HASH_CHAIN_LEN,
     OTP_PAD_SIZE,
-    OTP_PADDING_LIMIT,
-    OTP_PADDING_LENGTH,
+    OTP_SIZE_LENGTH,
     ML_KEM_1024_NAME,
     ML_KEM_1024_CT_LEN,
     ML_DSA_87_NAME,  
@@ -282,10 +281,15 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
             return
         
         contact_pads = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
+        contact_strand_key = contact_pads[:32]
+        contact_hash_chain = contact_pads[32:32 + KEY_HASH_CHAIN_LEN]
+        contact_pads = contact_pads[32 + KEY_HASH_CHAIN_LEN:]
 
         with user_data_lock:
-            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads[64:]
-            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = contact_pads[:64]
+            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads
+            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = contact_hash_chain
+
+            user_data["contacts"][contact_id]["contact_strand_key"]         = contact_strand_key
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
             
@@ -296,7 +300,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         
         logger.debug("Incremented McEliece's rotation_counter by 1 (now is %d) for contact (%s)", rotation_counter, contact_id)
 
-        logger.info("Saved contact (%s) new batch of One-Time-Pads and hash chain seed", contact_id)
+        logger.info("Saved contact (%s) new batch of One-Time-Pads, new strand key, and new hash chain seed", contact_id)
         save_account_data(user_data, user_data_lock)
 
 
