@@ -95,8 +95,8 @@ def otp_encrypt_with_padding(plaintext: bytes, key: bytes) -> Tuple[bytes, bytes
         Ciphertext bytes.
     """
 
-    if len(plaintext) < OTP_MAX_BUCKET:
-        pad_len = OTP_MAX_BUCKET - len(plaintext)
+    if len(plaintext) <= OTP_MAX_BUCKET - OTP_SIZE_LENGTH:
+        pad_len = OTP_MAX_BUCKET - OTP_SIZE_LENGTH - len(plaintext)
     else:
         pad_len = secrets.randbelow(OTP_MAX_RANDOM_PAD + 1)
     
