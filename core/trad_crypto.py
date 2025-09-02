@@ -67,7 +67,7 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, output_length: int 
     ), salt
 
 
-def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
+def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
     """
     Encrypt plaintext using ChaCha20Poly1305.
 
@@ -83,7 +83,9 @@ def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, counter: int = None,
         - nonce: The randomly generated AES-GCM nonce.
         - ciphertext: The encrypted data including the authentication tag.
     """
-    nonce = secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN)
+    if nonce is None:
+        nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+
     if counter is not None:
         if counter > counter_safety:
             raise ValueError("ChaCha counter has overflowen")

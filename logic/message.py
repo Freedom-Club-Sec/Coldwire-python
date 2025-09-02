@@ -72,7 +72,8 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob + mceliece_ciphertext_blob, our_lt_private_key)
 
-    hash_chain_seed = secrets.token_bytes(MESSAGE_HASH_CHAIN_LEN)
+    hash_chain_seed = sha3_512(secrets.token_bytes(MESSAGE_HASH_CHAIN_LEN))
+
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
             b"\x00" + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
@@ -90,9 +91,12 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     pads, _ = one_time_pad(kyber_shared_secrets, mceliece_shared_secrets)
 
+
+    our_strand_key = sha3_512(pads[:32])[:32]
+
     # We update & save only at the end, so if request fails, we do not desync our state.
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_strand_key"]         = pads[:32]
+        user_data["contacts"][contact_id]["our_strand_key"]         = our_strand_key
         user_data["contacts"][contact_id]["our_pads"]["pads"]       = pads[32:]
 
         user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = hash_chain_seed
@@ -294,7 +298,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
             return
         
         contact_pads, _ = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
-        contact_strand_key = contact_pads[:32]
+        contact_strand_key = sha3_512(contact_pads[:32])[:32]
         contact_pads = contact_pads[32:]
 
 
