@@ -20,7 +20,7 @@ from core.crypto import (
         generate_kem_keys,
         encap_shared_secret,
         decap_shared_secret,
-
+        one_time_pad
 )
 from core.trad_crypto import (
         derive_key_argon2id, 
@@ -244,12 +244,10 @@ def smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui
     with user_data_lock:
         tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
 
-        our_next_strand_nonce      = user_data["contacts"][contact_id]["our_next_strand_nonce"]
         contact_next_strand_nonce  = user_data["contacts"][contact_id]["contact_next_strand_nonce"]
 
 
     ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-
 
     smp_plaintext = decrypt_xchacha20poly1305(tmp_key, contact_next_strand_nonce, ciphertext_blob)
 
@@ -264,11 +262,9 @@ def smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui
     question      = smp_plaintext[SMP_NONCE_LENGTH + XCHACHA20POLY1305_NONCE_LEN + SMP_PROOF_LENGTH + ML_DSA_87_PK_LEN:].decode("utf-8")
 
 
-
     with user_data_lock: 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] = question
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_proof"] = contact_proof
-        # user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] = 5
 
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_new_strand_nonce
 
@@ -326,7 +322,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
         return
 
 
-    # We compute proof for contact's public key (signing public key, and the question public key)
+    # We compute proof for contact's public key (signing public key, and the kem public key)
     contact_key_fingerprint = sha3_512(contact_signing_public_key + contact_kem_public_key)
 
     our_proof = contact_nonce + our_nonce + contact_key_fingerprint
@@ -353,6 +349,10 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
+
+
+    our_strand_key, _     = one_time_pad(sha3_512(answer_secret)[:32], our_strand_key)
+    contact_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_strand_key)
 
 
     # We call smp_success at very end to ensure if the requests step fail, we don't alter our local state
@@ -413,11 +413,14 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
 
 
     # Verify Contact's version of our public-key fingerprint matches our actual public-key fingerprint
-    # We compare using compare_digest to prevent timing analysis by avoiding content-based short circuiting behaviour
     if not hmac.compare_digest(our_proof, contact_proof):
         logger.warning("SMP Verification failed at step 5")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
         return
+
+
+    our_strand_key, _     = one_time_pad(sha3_512(answer_secret)[:32], our_strand_key)
+    contact_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_strand_key)
 
     with user_data_lock:
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_new_strand_nonce
