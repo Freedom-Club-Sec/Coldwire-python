@@ -9,9 +9,8 @@
 **Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
 
 ## 🔒 Security Model & Features
-- **Best‑case security**: achieves [unbreakable encryption](https://en.wikipedia.org/wiki/One-time_pad) under the principles of information theory using [one‑time pads](https://en.wikipedia.org/wiki/One-time_pad) 
-- **Worst‑case security**: falls back only to combined security of ML‑KEM‑1024 and McEliece8192128  
-- **Perfect-Forward-Secrecy**: on every [OTP](https://en.wikipedia.org/wiki/One-time_pad) batch through ephemeral PQC key exchanges  
+- **Security**: Essentially unbreakable composite encryption scheme.
+- **Perfect-Forward-Secrecy**: Keys are rotated after use.
 - **Plausible Deniability**: messages are not cryptographically tied to you, providing more deniability than [Off‑The‑Record messaging](https://en.wikipedia.org/wiki/Off-the-record_messaging) !
 - **Mandatory SMP**: We enforce [Socialist millionaire problem](https://en.wikipedia.org/wiki/Socialist_millionaire_problem) before any chat. **MiTM attacks are impossible**.  
 - **Minimal Attack Surface**:  
