@@ -137,11 +137,10 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                             blob_plaintext = decrypt_xchacha20poly1305(chacha_key, contact_next_strand_nonce, blob)
                         except Exception as e:
                             logger.error(
-                                    "Impossible error: Failed to decrypt blob from contact (%s)"
-                                    "We dont know what caused this, maybe the contact is trying to denial-of-service you"
-                                    ". Skipping data because of error: %s", sender, str(e)
+                                    "Failed to decrypt blob from contact (%s)"
+                                    "We dont know what caused this except maybe a re-SMP verification. error: %s", sender, str(e)
                                 )
-                            continue
+                            blob_plaintext = blob
             else:
                 logger.debug("Contact (%s) not saved.. we just gonna assume blob_plaintext = blob", sender)
                 blob_plaintext = blob

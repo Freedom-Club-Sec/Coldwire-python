@@ -483,12 +483,25 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
 
+        tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
+
     smp_failure(user_data, user_data_lock, contact_id, ui_queue)
 
+    # it can be any number other than 2, we chose 7 because failure is *technically* the 7th smp step.
+    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+            tmp_key, 
+            SMP_TYPE + b"failure", 
+            counter = 7
+        )
     try:
-        http_request(f"{server_url}/smp/failure", "POST", payload = {"recipient": contact_id}, auth_token=auth_token)
-    except Exception:
-        logger.error("Failed to send SMP failure to server, either you are offline or the server is down")
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_nonce + ciphertext_blob, 
+            auth_token = auth_token
+        )
+    except Exception as e:
+        logger.error("Failed to send SMP failure to contact (%s), either you are offline or the server is down. Error: %s", contact_id, str(e))
         pass
   
 
@@ -516,12 +529,12 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, cont
 
 
 
-    """
-    if "failure" in message:
+    
+    if message == b"failure":
         # Delete SMP state for contact
         smp_failure(user_data, user_data_lock, contact_id, ui_queue)
         return
-    """
+    
 
     # Check if we don't have this contact saved
     if contact_id not in user_data_copied["contacts"]:

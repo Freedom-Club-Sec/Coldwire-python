@@ -67,7 +67,7 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, output_length: int 
     ), salt
 
 
-def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, counter: int = None, counter_safety: int = 2 ** 32) -> tuple[bytes, bytes]:
+def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, counter: int = None, counter_safety: int = 255) -> tuple[bytes, bytes]:
     """
     Encrypt plaintext using ChaCha20Poly1305.
 
@@ -90,7 +90,7 @@ def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None,
         if counter > counter_safety:
             raise ValueError("ChaCha counter has overflowen")
 
-        nonce = nonce[:XCHACHA20POLY1305_NONCE_LEN - 4] + counter.to_bytes(4, "big")
+        nonce = nonce[:XCHACHA20POLY1305_NONCE_LEN - 1] + counter.to_bytes(1, "big")
 
     ciphertext = bindings.crypto_aead_xchacha20poly1305_ietf_encrypt(plaintext, None, nonce, key) 
 

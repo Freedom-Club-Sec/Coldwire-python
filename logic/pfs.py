@@ -203,7 +203,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         user_data_lock (threading.Lock): Lock protecting shared state.
         user_data_copied (dict): A read-only copy of user_data for consistency.
         ui_queue (queue.Queue): UI queue for notifications/errors.
-        message (dict): Incoming PFS message from the server.
+        pfs_plaintext (bytes): Decrypted Incoming PFS plaintext from the server.
     
     Returns:
         None
