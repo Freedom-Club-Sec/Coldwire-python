@@ -13,13 +13,11 @@ from core.constants import (
 )
 from core.crypto import random_number_range
 from core.trad_crypto import (
-        encrypt_xchacha20poly1305,
         decrypt_xchacha20poly1305
 )
 from base64 import b64decode
 import copy
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,6 @@ from core.trad_crypto import (
     sha3_512
 )
 import urllib
-import uuid
 import json
 import logging
 import string

@@ -111,7 +111,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
             PFS_TYPE + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
-            nonce = our_next_strand_nonce 
+            nonce = our_next_strand_nonce,
+            max_padding = 1024
         )
 
     try:
