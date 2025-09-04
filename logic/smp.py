@@ -30,6 +30,7 @@ from core.trad_crypto import (
 )
 from base64 import b64encode, b64decode
 from core.constants import (
+        SMP_TYPE,
         SMP_NONCE_LENGTH,
         SMP_PROOF_LENGTH,
         SMP_QUESTION_MAX_LEN,
@@ -44,6 +45,7 @@ import hashlib
 import secrets
 import hmac
 import logging
+import json
 import threading
 import queue
 
@@ -68,14 +70,13 @@ def initiate_smp(user_data: dict, user_data_lock: threading.Lock, contact_id: st
     kem_private_key, kem_public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
     try:
-        response = http_request(f"{server_url}/smp/initiate", "POST", payload = {
-            "kem_public_key": b64encode(kem_public_key).decode(),
+        response = http_request(f"{server_url}/data/send", "POST", metadata = {
             "recipient": contact_id
-
-        }, auth_token=auth_token)
+        }, blob = SMP_TYPE + kem_public_key, auth_token = auth_token)
     except Exception:
         raise ValueError("Could not connect to server")
 
+    response = json.loads(response.decode())
     if (not ("status" in response)) or response["status"] != "success":
         if "error" in response:
             raise ValueError(response["error"][:512])
@@ -100,13 +101,13 @@ def initiate_smp(user_data: dict, user_data_lock: threading.Lock, contact_id: st
 
 
 
-def smp_step_2(user_data: dict, user_data_lock, contact_id: str, message: dict, ui_queue: queue.Queue) -> None:
+def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui_queue: queue.Queue) -> None:
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
         our_id     = user_data["user_id"]
 
-    contact_kem_public_key = b64decode(message["kem_public_key"], validate = True)
+    contact_kem_public_key = blob 
 
     signing_private_key, signing_public_key = generate_sign_keys()
 
@@ -126,11 +127,13 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, message: dict, 
         )
 
     try:
-        http_request(f"{server_url}/smp/step", "POST", payload = {
-            "ciphertext_blob": b64encode(key_ciphertext + ciphertext_nonce + ciphertext_blob).decode(),
-            "recipient": contact_id
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = SMP_TYPE + key_ciphertext + ciphertext_nonce + ciphertext_blob, 
+            auth_token = auth_token
+        )
 
-        }, auth_token=auth_token)
     except Exception:
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
@@ -144,7 +147,7 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, message: dict, 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"] = b64encode(our_nonce).decode()
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"] = b64encode(chacha_key).decode()
 
-        user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_kem_public_key"] = message["kem_public_key"]
+        user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_kem_public_key"] = b64encode(blob).decode()
         
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = signing_private_key
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]  = signing_public_key
@@ -155,7 +158,7 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, message: dict, 
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce
 
 
-def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str, message: dict, ui_queue: queue.Queue()) -> None:
+def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str, blob: bytes, ui_queue: queue.Queue()) -> None:
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
@@ -166,8 +169,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
         our_kem_private_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_kem_keys"]["private_key"])
 
-    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    key_ciphertext = ciphertext_blob[:ML_KEM_1024_CT_LEN]
+    key_ciphertext = blob[:ML_KEM_1024_CT_LEN]
 
     chacha_key = decap_shared_secret(key_ciphertext, our_kem_private_key, ML_KEM_1024_NAME)
 
@@ -175,8 +177,8 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
     smp_plaintext = decrypt_xchacha20poly1305(
             chacha_key, 
-            ciphertext_blob[ML_KEM_1024_CT_LEN : ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN],
-            ciphertext_blob[ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN:]
+            blob[ML_KEM_1024_CT_LEN : ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN],
+            blob[ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN:]
         )
 
     contact_signing_public_key = smp_plaintext[:ML_DSA_87_PK_LEN]
@@ -205,17 +207,18 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             chacha_key, 
-            our_new_strand_nonce + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
+            SMP_TYPE + our_new_strand_nonce + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
             nonce = our_next_strand_nonce
         )
 
 
     try:
-        http_request(f"{server_url}/smp/step", "POST", payload = {
-            "ciphertext_blob": b64encode(ciphertext_blob).decode(),
-            "recipient": contact_id
-
-        }, auth_token=auth_token)
+       http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_blob, 
+            auth_token = auth_token
+        )
     except Exception:
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
@@ -240,17 +243,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] = 5
 
 
-def smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui_queue) -> None:
-    with user_data_lock:
-        tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
-
-        contact_next_strand_nonce  = user_data["contacts"][contact_id]["contact_next_strand_nonce"]
-
-
-    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-
-    smp_plaintext = decrypt_xchacha20poly1305(tmp_key, contact_next_strand_nonce, ciphertext_blob)
-
+def smp_step_4_request_answer(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -> None:
     contact_new_strand_nonce = smp_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
     
     contact_signing_public_key = smp_plaintext[XCHACHA20POLY1305_NONCE_LEN : ML_DSA_87_PK_LEN + XCHACHA20POLY1305_NONCE_LEN]
@@ -335,16 +328,18 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             tmp_key, 
-            our_new_strand_nonce + our_proof + our_strand_key + contact_strand_key,
+            SMP_TYPE + our_new_strand_nonce + our_proof + our_strand_key + contact_strand_key,
             nonce = our_next_strand_nonce
         )
 
 
     try:
-        http_request(f"{server_url}/smp/step", "POST", payload = {
-            "ciphertext_blob": b64encode(ciphertext_blob).decode(),
-            "recipient": contact_id
-        }, auth_token=auth_token)
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_blob, 
+            auth_token = auth_token
+        )
     except Exception:
         logger.error("Failed to send proof request to server, either you are offline or the server is down")
         smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue)
@@ -368,7 +363,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
 
 
-def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None:
+def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -> None:
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
@@ -381,8 +376,6 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
         our_nonce          = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
         contact_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"], validate=True)
 
-        tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
-        contact_next_strand_nonce  = user_data["contacts"][contact_id]["contact_next_strand_nonce"]
 
 
     our_key_fingerprint = sha3_512(our_signing_public_key + our_kem_public_key)
@@ -395,10 +388,6 @@ def smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue) -> None
     our_proof = our_nonce + contact_nonce + our_key_fingerprint
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
-    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-
-
-    smp_plaintext = decrypt_xchacha20poly1305(tmp_key, contact_next_strand_nonce, ciphertext_blob)
     
     contact_new_strand_nonce = smp_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
 
@@ -516,8 +505,7 @@ def smp_unanswered_questions(user_data, user_data_lock, ui_queue):
                 })
 
 
-def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, message):
-    contact_id = message["sender"]
+def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, contact_id, message):
 
     try:
         smp_step = user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"]
@@ -527,10 +515,13 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, mess
         smp_step = 2
 
 
+
+    """
     if "failure" in message:
         # Delete SMP state for contact
         smp_failure(user_data, user_data_lock, contact_id, ui_queue)
         return
+    """
 
     # Check if we don't have this contact saved
     if contact_id not in user_data_copied["contacts"]:

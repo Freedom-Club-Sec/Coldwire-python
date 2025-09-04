@@ -1,5 +1,9 @@
-import tkinter as tk
+from tkinter import messagebox
 from logic.message import send_message_processor
+from core.constants import (
+       OTP_MAX_MESSAGE_LEN 
+)
+import tkinter as tk
 
 class ChatWindow(tk.Toplevel):
     def __init__(self, master, contact_id, ui_queue):
@@ -48,6 +52,10 @@ class ChatWindow(tk.Toplevel):
         if not message:
             return "break"
 
+        if len(message) > OTP_MAX_MESSAGE_LEN:
+            messagebox.showerror("Error", f"Your message length ({len(message)}) is too large! Messages must be under {OTP_MAX_MESSAGE_LEN}")
+            return "break"
+
         self.entry.delete("1.0", "end")
 
         success = send_message_processor(self.master.user_data, self.master.user_data_lock, self.contact_id, message, self.master.ui_queue)
@@ -71,7 +79,7 @@ class ChatWindow(tk.Toplevel):
         
         else:
             self.chat_display.insert("end", contact_nickname + ":", "contact")
-            self.chat_display.insert("end", message[len(contact_nickname):] + "\n")
+            self.chat_display.insert("end", message[len(contact_nickname): OTP_MAX_MESSAGE_LEN + len(contact_nickname)] + "\n")
 
 
 

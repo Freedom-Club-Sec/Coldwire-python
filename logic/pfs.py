@@ -19,6 +19,7 @@ from core.crypto import (
     random_number_range
 )
 from core.constants import (
+    PFS_TYPE,
     ML_KEM_1024_NAME,
     ML_DSA_87_NAME,
     ML_KEM_1024_PK_LEN,
@@ -65,6 +66,10 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
     with user_data_lock:
         user_data_copied = copy.deepcopy(user_data)
+
+        # we put here because it could've change between time copy finished copying.
+
+        our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
  
     server_url       = user_data_copied["server_url"]
     auth_token       = user_data_copied["token"]
@@ -102,16 +107,20 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     # Sign them with our per-contact long-term private key
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
     
-    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            publickeys_hashchain_signature + publickeys_hashchain
+            PFS_TYPE + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
+            nonce = our_next_strand_nonce 
         )
 
     try:
-        http_request(f"{server_url}/pfs/send_keys", "POST", payload={
-                "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
-                "recipient"      : contact_id,
-            }, auth_token=auth_token)
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_blob, 
+            auth_token = auth_token
+        )
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our ephemeral keys to the server"})
         return
@@ -119,6 +128,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
     # We update at the very end to ensure if any of previous steps fail, we do not desync our state
     with user_data_lock:
+        user_data["contacts"][contact_id]["our_next_strand_nonce"] = our_new_strand_nonce 
 
         user_data["tmp"]["new_ml_kem_keys"][contact_id] = {
                 "private_key": kyber_private_key,
@@ -178,7 +188,7 @@ def update_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock) -> No
 
 
 
-def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_copied: dict, ui_queue: queue.Queue, message: dict) -> None:
+def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_copied: dict, ui_queue: queue.Queue, contact_id: str, pfs_plaintext: bytes) -> None:
     """
     Handle incoming PFS (Perfect Forward Secrecy) key messages from contacts.
 
@@ -198,7 +208,6 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     Returns:
         None
     """
-    contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
         logger.error("Contact (%s) is not saved! Skipping message", contact_id)
@@ -220,21 +229,18 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
         return 
 
-    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    
-    # Everything from here is not validated by server
-    try:
-        pfs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
-    except Exception as e:
-        logger.error("Failed to decrypt `ciphertext_blob` from contact (%s) with error: %s", contact_id, str(e))
-        return
 
-    if (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) or len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
+    if (
+        (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) 
+        or 
+        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + XCHACHA20POLY1305_NONCE_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN
+    ):
         logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
         return
 
-    contact_hashchain_signature  = pfs_plaintext[:ML_DSA_87_SIGN_LEN]
-    contact_publickeys_hashchain = pfs_plaintext[ML_DSA_87_SIGN_LEN:]
+    contact_next_strand_nonce    = pfs_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
+    contact_hashchain_signature  = pfs_plaintext[XCHACHA20POLY1305_NONCE_LEN : ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN]
+    contact_publickeys_hashchain = pfs_plaintext[ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN:]
 
     contact_hash_chain           = contact_publickeys_hashchain[:KEYS_HASH_CHAIN_LEN]
 
@@ -273,7 +279,10 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     elif len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber keys", contact_id)
 
+
     with user_data_lock:
+        user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce 
+
         user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
         user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = contact_kyber_public_key
 

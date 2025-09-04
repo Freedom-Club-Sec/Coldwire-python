@@ -12,6 +12,7 @@ from core.constants import (
         ML_DSA_87_NAME,
         CHALLENGE_LEN
 )
+import json
 
 def authenticate_account(user_data: dict) -> dict:
     """
@@ -37,12 +38,14 @@ def authenticate_account(user_data: dict) -> dict:
     user_id = user_data.get("user_id") or ""
 
     try:
-        response = http_request(url + "/authenticate/init", "POST", payload = {"public_key": public_key_encoded, "user_id": user_id })
+        response = http_request(url + "/authenticate/init", "POST", metadata = {"public_key": public_key_encoded, "user_id": user_id })
     except Exception:
         if user_data["settings"]["proxy_info"] is not None:
             raise ValueError("Could not connect to server! Are you sure your proxy settings are valid ?")
         else:
             raise ValueError("Could not connect to server! Are you sure the URL is valid ?")
+    
+    response = json.loads(response.decode())
 
     if not 'challenge' in response:
         raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
@@ -56,9 +59,11 @@ def authenticate_account(user_data: dict) -> dict:
     signature = create_signature(ML_DSA_87_NAME, challenge[:CHALLENGE_LEN], private_key)
 
     try:
-        response = http_request(url + "/authenticate/verify", "POST", payload = {"signature": b64encode(signature).decode(), "challenge": response["challenge"]})
+        response = http_request(url + "/authenticate/verify", "POST", metadata = {"signature": b64encode(signature).decode(), "challenge": response["challenge"]})
     except Exception:
         raise ValueError("Server gave a malformed response, your account is probably missing from the server")
+
+    response = json.loads(response.decode())
 
     required_keys = ["status", "user_id", "token"]
     missing = [k for k in required_keys if k not in response]

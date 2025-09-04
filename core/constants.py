@@ -2,10 +2,17 @@
 APP_NAME      = "Coldwire"
 APP_VERSION   = "0.1"
 
-# hard-coded filepaths
+# hard-coded filepaths 
 ACCOUNT_FILE_PATH = "account.coldwire"
 
-# network defaults (seconds)
+# Coldwire protocol misc (bytes)
+SMP_TYPE = b"\x00"
+PFS_TYPE = b"\x01"
+MSG_TYPE = b"\x02"
+
+COLDWIRE_LEN_OFFSET = 3
+
+# network defaults (seconds & bytes)
 LONGPOLL_MIN  = 5
 LONGPOLL_MAX  = 30  
 
@@ -14,10 +21,11 @@ CHALLENGE_LEN     = 11264
 
 XCHACHA20POLY1305_NONCE_LEN = 24
 
-OTP_PAD_SIZE       = 11264
-OTP_MAX_BUCKET     = 64
-OTP_MAX_RANDOM_PAD = 16 
-OTP_SIZE_LENGTH    = 2
+OTP_PAD_SIZE        = 11264
+OTP_MAX_BUCKET      = 64
+OTP_MAX_RANDOM_PAD  = 16 
+OTP_SIZE_LENGTH     = 2
+OTP_MAX_MESSAGE_LEN = OTP_PAD_SIZE - OTP_SIZE_LENGTH
 
 SMP_NONCE_LENGTH      = 64
 SMP_PROOF_LENGTH      = 64
@@ -27,6 +35,7 @@ SMP_QUESTION_MAX_LEN  = 512
 KEYS_HASH_CHAIN_LEN    = 64
 MESSAGE_HASH_CHAIN_LEN = 64
 
+    
 
 # NIST-specified key sizes (bytes) and metadata
 ML_KEM_1024_NAME   = "ML-KEM-1024"

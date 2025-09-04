@@ -28,6 +28,7 @@ from core.crypto import (
     otp_decrypt_with_padding
 )
 from core.constants import ( 
+    MSG_TYPE,
     MESSAGE_HASH_CHAIN_LEN,
     OTP_MAX_BUCKET,
     OTP_PAD_SIZE,
@@ -64,6 +65,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
  
         our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
 
+        our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
 
 
     kyber_ciphertext_blob   , kyber_shared_secrets    = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
@@ -73,17 +75,21 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     hash_chain_seed = sha3_512(secrets.token_bytes(MESSAGE_HASH_CHAIN_LEN))
 
-    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            b"\x00" + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob
+            MSG_TYPE + b"\x00" + our_new_strand_nonce + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob,
+            nonce = our_next_strand_nonce
         )
 
 
     try:
-        http_request(f"{server_url}/messages/send", "POST", payload={
-                "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
+        http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
-            }, auth_token=auth_token)
+            }, 
+            blob = ciphertext_blob, 
+            auth_token = auth_token
+        )
     except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our one-time-pads key batch to the server"})
         return False
@@ -91,10 +97,11 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     pads, _ = one_time_pad(kyber_shared_secrets, mceliece_shared_secrets)
 
 
-    our_strand_key = sha3_512(pads[:32])[:32]
+    our_strand_key = pads[:32]
 
     # We update & save only at the end, so if request fails, we do not desync our state.
     with user_data_lock:
+        user_data["contacts"][contact_id]["our_next_strand_nonce"]  = our_new_strand_nonce 
         user_data["contacts"][contact_id]["our_strand_key"]         = our_strand_key
         user_data["contacts"][contact_id]["our_pads"]["pads"]       = pads[32:]
 
@@ -187,44 +194,50 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     next_hash_chain = sha3_512(our_hash_chain + message_encrypted)
     
+    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    
     with user_data_lock:
         user_data["contacts"][contact_id]["our_pads"]["pads"]       = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encrypted):]
         user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = next_hash_chain
 
         our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
 
+        our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
+        user_data["contacts"][contact_id]["our_next_strand_nonce"]  = our_new_strand_nonce 
+
     save_account_data(user_data, user_data_lock)
 
-    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
+    _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            b"\x01" + next_hash_chain + message_encrypted
+            MSG_TYPE + b"\x01" + our_new_strand_nonce + next_hash_chain + message_encrypted,
+            nonce = our_next_strand_nonce
         )
    
     try:
-        http_request(f"{server_url}/messages/send", "POST", payload = {
-                    "ciphertext_blob": b64encode(ciphertext_nonce + ciphertext_blob).decode(),
-                    "recipient": contact_id
-                }, 
-                auth_token=auth_token
-            )
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_blob, 
+            auth_token = auth_token
+        )
     except:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our message to the server"})
         return False
-   
+
 
     logger.info("Successfuly sent the message to contact (%s)", contact_id)
+    
 
     return True
 
 
 
-def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dict, ui_queue, message: dict) -> None:
+def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dict, ui_queue, contact_id: str, msgs_plaintext: dict) -> None:
     """
     Handles incoming messages and OTP batches.
     Verifies signatures, decrypts payloads, updates pads/hash chain, and forwards plaintext to UI.
-    Skips or logs suspicious or invalid messages.
+    Skips and or logs suspicious or invalid messages.
     """
-    contact_id = message["sender"]
 
     if contact_id not in user_data_copied["contacts"]:
         logger.error("Contact (%s) is not saved! Skipping message", contact_id)
@@ -238,38 +251,28 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
 
     contact_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
-    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
-
+    
     if contact_public_key is None:
         logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
         return
 
-    if not contact_strand_key:
+    if user_data_copied["contacts"][contact_id]["contact_strand_key"] is None:
         logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
         return 
 
-
-    ciphertext_blob = b64decode(message["ciphertext_blob"], validate = True)
-    
-    # Everything from here is not validated by server
-    try:
-        msgs_plaintext = decrypt_xchacha20poly1305(contact_strand_key, ciphertext_blob[:XCHACHA20POLY1305_NONCE_LEN], ciphertext_blob[XCHACHA20POLY1305_NONCE_LEN:])
-    except Exception as e:
-        logger.error("Failed to decrypt `ciphertext_blob` from contact (%s) with error: %s", contact_id, str(e))
-        return
 
    
     if msgs_plaintext[0] == 0:
         logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
-        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + 1:
+        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
             logger.error("Contact (%s) gave us a otp batch message request with malformed strand plaintext length (%d)", contact_id, len(msgs_plaintext))
             return
 
-        otp_hashchain_signature  = msgs_plaintext[1 + MESSAGE_HASH_CHAIN_LEN : MESSAGE_HASH_CHAIN_LEN + ML_DSA_87_SIGN_LEN + 1]
-        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + 1:]
+        otp_hashchain_signature  = msgs_plaintext[1 + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
+        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:]
 
-        contact_hash_chain = msgs_plaintext[1 : MESSAGE_HASH_CHAIN_LEN + 1]
+        contact_hash_chain = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
 
         try:
             valid_signature = verify_signature(ML_DSA_87_NAME, otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
@@ -297,7 +300,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
             return
         
         contact_pads, _ = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
-        contact_strand_key = sha3_512(contact_pads[:32])[:32]
+        contact_strand_key = contact_pads[:32]
         contact_pads = contact_pads[32:]
 
 
@@ -330,13 +333,13 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     elif msgs_plaintext[0] == 1:
         logger.debug("Received a new message from contact (%s).", contact_id)
 
-        if len(msgs_plaintext) < OTP_MAX_BUCKET + MESSAGE_HASH_CHAIN_LEN + 1:
+        if len(msgs_plaintext) < OTP_MAX_BUCKET + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
             logger.error("Contact (%s) gave us a message request with malformed strand plaintext length (%d)", contact_id, len(msgs_plaintext))
             return
 
 
-        hash_chain        = msgs_plaintext[1:MESSAGE_HASH_CHAIN_LEN + 1]
-        message_encrypted = msgs_plaintext[MESSAGE_HASH_CHAIN_LEN + 1:]
+        hash_chain        = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN : MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
+        message_encrypted = msgs_plaintext[MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:]
 
         
         with user_data_lock:
@@ -385,3 +388,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
     else:
         logger.error("Received unknown message type (%d)", msgs_plaintext[0])
+        return
+   
+    with user_data_lock:
+        user_data["contacts"][contact_id]["contact_next_strand_nonce"]  = msgs_plaintext[1: XCHACHA20POLY1305_NONCE_LEN + 1]
