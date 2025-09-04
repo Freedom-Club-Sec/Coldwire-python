@@ -62,10 +62,6 @@ def undo_monkey_patching():
         socket.socket = _ORIGINAL_SOCKET
 
 
-
-
-
-
 # Helper function to encode a form field
 def encode_field(name: str, value: str, boundary: str, CRLF: str) -> bytes:
     return (

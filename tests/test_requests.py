@@ -94,6 +94,9 @@ def test_http_request_get_with_auth(monkeypatch):
 
     monkeypatch.setattr(core_requests.request, "urlopen", fake_urlopen)
     result = core_requests.http_request("http://test.com", "GET", auth_token="ABC123")
+
+    result = json.loads(result.decode())
+    
     assert result["ok"] is True
     assert captured["method"] == "GET"
     assert any(k.lower() == "authorization" and v == "Bearer ABC123"
@@ -110,7 +113,10 @@ def test_http_request_post_with_payload_sets_content_type(monkeypatch):
 
     monkeypatch.setattr(core_requests.request, "urlopen", fake_urlopen)
     payload = {"msg": "hello"}
-    result = core_requests.http_request("http://test.com", "POST", payload=payload)
+
+    result = core_requests.http_request("http://test.com", "POST", metadata=payload)
+    result = json.loads(result.decode())
+
     assert result["done"] is True
     assert captured["body"]["msg"] == "hello"
     assert any(k.lower() == "content-type" and v == "application/json"
@@ -125,9 +131,11 @@ def test_http_request_longpoll_timeout(monkeypatch):
         return DummyResponse({"lp": True})
 
     monkeypatch.setattr(core_requests.request, "urlopen", fake_urlopen)
-    result = core_requests.http_request("http://test.com", "GET", longpoll=30)
+    result = core_requests.http_request("http://test.com", "GET", longpoll=6)
+    result = json.loads(result.decode())
+
     assert result["lp"] is True
-    assert called["timeout"] == 30
+    assert called["timeout"] == 6
 
 def test_combined_undo_restores_socks_and_http(proxy_info_socks, proxy_info_http):
     original_socket = socket.socket
