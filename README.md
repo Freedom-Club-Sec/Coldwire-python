@@ -18,7 +18,7 @@
   - Minimal Python dependecies
   - All untrusted inputs truncated to safe lengths to prevent buffer‑overflow in liboqs or Tk  
 - **Traffic obfuscation**: Network adversaries (ISP, etc) cannot easily censorship Coldwire, because we utilize HTTP(s).
-- **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication. Everything is local, encrypted, and ephemeral.
+- **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication.
 
 ## ⚠️ Disclaimer
 While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-Sec/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development. 
