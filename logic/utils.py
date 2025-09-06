@@ -6,7 +6,7 @@ def check_str_high_entropy(s: str) -> bool:
         return False
 
     # if string is not all ascii, just assume it has enough entropy.
-    if not s.ascii():
+    if not s.isascii():
         return True
 
     # Check if string is all lowercase or uppercase
