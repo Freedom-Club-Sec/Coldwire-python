@@ -73,8 +73,8 @@ def initiate_smp(user_data: dict, user_data_lock: threading.Lock, contact_id: st
         response = http_request(f"{server_url}/data/send", "POST", metadata = {
             "recipient": contact_id
         }, blob = SMP_TYPE + kem_public_key, auth_token = auth_token)
-    except Exception:
-        raise ValueError("Could not connect to server")
+    except Exception as e:
+        raise ValueError("Could not connect to server: " + str(e))
 
     response = json.loads(response.decode())
     if (not ("status" in response)) or response["status"] != "success":
