@@ -48,7 +48,7 @@ def authenticate_account(user_data: dict) -> dict:
     try:
         response = json.loads(response.decode())
     except Exception as e:
-        raise ValueError("Error while parsing server JSON response: ")
+        raise ValueError("Error while parsing server JSON response: " + str(e))
 
     if not 'challenge' in response:
         raise ValueError("Server did not give authenticatation challenge! Are you sure this is a Coldwire server ?")
