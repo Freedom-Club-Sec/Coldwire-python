@@ -2,6 +2,7 @@ from core.requests import http_request
 from logic.smp import smp_unanswered_questions, smp_data_handler
 from logic.pfs import pfs_data_handler, update_ephemeral_keys
 from logic.message import messages_data_handler
+from logic.user import validate_identifier
 from core.constants import (
     LONGPOLL_MIN,
     LONGPOLL_MAX,
@@ -90,15 +91,9 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                 logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with no sender...")
                 continue
 
-            if message["sender"].isdigit() and len(message["sender"]) != 16:
-                logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with malformed same-server sender (%s)...", message["sender"])
+            if not validate_identifier(message["sender"]):
+                logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with malformed sender identifier (%s)...", message["sender"])
                 continue
-        
-            if (not message["sender"].isdigit()): 
-                split = message["sender"].split("@")
-                if (len(split) != 2) or (not split[0].isdigit()):
-                    logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with malformed federated-server sender (%s)...", message["sender"])
-                    continue
 
             sender = message["sender"]
             blob   = message["blob"]

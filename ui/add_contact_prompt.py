@@ -20,7 +20,7 @@ class AddContactPrompt(tk.Toplevel):
         self.entry = tk.Entry(self, font=("Helvetica", 12), bg="gray15", fg="white", insertbackground="white")
         self.entry.pack(pady=5)
         self.entry.focus()
-        enhanced_entry(self.entry, placeholder="I.e. 1234567890123456")
+        enhanced_entry(self.entry, placeholder="I.e. 1234567890123456, 1234567890123456@example.com")
 
         self.status = tk.Label(self, text="", fg="gray", bg="black", font=("Helvetica", 10))
         self.status.pack(pady=(5, 0))
@@ -62,5 +62,5 @@ class AddContactPrompt(tk.Toplevel):
 
         self.master.new_contact(contact_id)
         self.destroy()
-        messagebox.showinfo("Added", "Added the user to your contact list")
+        messagebox.showinfo("Added", f"Added the `{contact_id}` to your contact list.")
 
