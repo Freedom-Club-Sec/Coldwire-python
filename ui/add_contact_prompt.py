@@ -1,6 +1,6 @@
 from tkinter import messagebox
 from ui.utils import *
-from logic.get_user import check_if_contact_exists
+from logic.user import validate_identifier 
 from logic.contacts import save_contact
 from logic.storage import save_account_data
 import tkinter as tk
@@ -20,7 +20,7 @@ class AddContactPrompt(tk.Toplevel):
         self.entry = tk.Entry(self, font=("Helvetica", 12), bg="gray15", fg="white", insertbackground="white")
         self.entry.pack(pady=5)
         self.entry.focus()
-        enhanced_entry(self.entry, placeholder="I.e. 1234567890123456")
+        enhanced_entry(self.entry, placeholder="I.e. 1234567890123456, 1234567890123456@example.com")
 
         self.status = tk.Label(self, text="", fg="gray", bg="black", font=("Helvetica", 10))
         self.status.pack(pady=(5, 0))
@@ -42,28 +42,25 @@ class AddContactPrompt(tk.Toplevel):
 
     def add_contact(self):
         contact_id = self.entry.get().strip()
-        if not (contact_id.isdigit() and len(contact_id) == 16):
+        """if not (contact_id.isdigit() and len(contact_id) == 16):
             self.status.config(text="Invalid User ID", fg="red")
             return
+        """
 
         if contact_id == self.master.user_data["user_id"]:
             self.status.config(text="You cannot add yourself", fg="red")
             return
             
-        try:
-            if not check_if_contact_exists(self.master.user_data, self.master.user_data_lock, contact_id):
-                logger.error("[BUG] This should never execute, because the server should return a 40X error code and that should cause an exception..")
-                return
-
-            save_contact(self.master.user_data, self.master.user_data_lock, contact_id)
-            save_account_data(self.master.user_data, self.master.user_data_lock)
-        except ValueError as e:
-            self.status.config(text=e, fg="red")
-            logger.error("Error occured while adding new contact (%s): %s ", contact_id, e)
+        if not validate_identifier(contact_id):
+            logger.debug("Identifier is invalid.")
+            self.status.config(text = "Invalid identifier", fg="red")
             return
-            
+
+        save_contact(self.master.user_data, self.master.user_data_lock, contact_id)
+        save_account_data(self.master.user_data, self.master.user_data_lock)
+        
 
         self.master.new_contact(contact_id)
         self.destroy()
-        messagebox.showinfo("Added", "Added the user to your contact list")
+        messagebox.showinfo("Added", f"Added the `{contact_id}` to your contact list.")
 
