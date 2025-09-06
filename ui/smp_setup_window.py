@@ -80,11 +80,11 @@ class SMPSetupWindow(tk.Toplevel):
         if len(question) > SMP_QUESTION_MAX_LEN:
             messagebox.showerror("Error", f"Question must be under {SMP_QUESTION_MAX_LEN} characters long.")
 
-        if len(answer) <= 3:
-            messagebox.showerror("Error", "Answer must be at least 4 characters long!")
+        if len(answer) <= 6:
+            messagebox.showerror("Error", "Answer must be at least 6 characters long!")
             return
 
-        if len(answer) <= 5 or not check_str_high_entropy(answer):
+        if not check_str_high_entropy(answer):
             # Even though we enforce SMP, sometime a user might want to add someone whom our user don't have a out-of-band channel to communicate with
             # allowing the user to set a low-entropy answer gives user the opportunity to do so
             # But we still warn the user twice about the importance of the answer's entropy in context of SMP verification
