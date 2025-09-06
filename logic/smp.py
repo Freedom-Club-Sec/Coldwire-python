@@ -528,7 +528,7 @@ def smp_unanswered_questions(user_data, user_data_lock, ui_queue):
                 })
 
 
-def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, contact_id, message):
+def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, contact_id, message) -> None:
 
     try:
         smp_step = user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"]
@@ -537,6 +537,11 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, cont
     except Exception:
         smp_step = 2
 
+
+    
+    if user_data_copied["settings"]["ignore_new_contacts_smp"]:
+        logger.info("Skipping SMP request because you have set to ignore new contacts requests.")
+        return
 
 
     
