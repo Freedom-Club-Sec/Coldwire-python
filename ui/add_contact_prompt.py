@@ -42,10 +42,6 @@ class AddContactPrompt(tk.Toplevel):
 
     def add_contact(self):
         contact_id = self.entry.get().strip()
-        """if not (contact_id.isdigit() and len(contact_id) == 16):
-            self.status.config(text="Invalid User ID", fg="red")
-            return
-        """
 
         if contact_id == self.master.user_data["user_id"]:
             self.status.config(text="You cannot add yourself", fg="red")
