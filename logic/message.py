@@ -71,6 +71,11 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     kyber_ciphertext_blob   , kyber_shared_secrets    = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
     mceliece_ciphertext_blob, mceliece_shared_secrets = generate_shared_secrets(contact_mceliece_public_key, CLASSIC_MCELIECE_8_F_NAME)
 
+    xchacha_shared_secrets = b''
+    while len(xchacha_shared_secrets) < OTP_PAD_SIZE:
+        xchacha_shared_secrets += sha3_512(secrets.token_bytes(64))
+
+
     otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob + mceliece_ciphertext_blob, our_lt_private_key)
 
     hash_chain_seed = sha3_512(secrets.token_bytes(MESSAGE_HASH_CHAIN_LEN))
@@ -78,7 +83,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            MSG_TYPE + b"\x00" + our_new_strand_nonce + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob,
+            MSG_TYPE + b"\x00" + our_new_strand_nonce + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob + xchacha_shared_secrets,
             nonce = our_next_strand_nonce
         )
 
@@ -95,6 +100,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
         return False
 
     pads, _ = one_time_pad(kyber_shared_secrets, mceliece_shared_secrets)
+    pads, _ = one_time_pad(pads, xchacha_shared_secrets)
 
 
     our_strand_key = pads[:32]
@@ -265,12 +271,16 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     if msgs_plaintext[0] == 0:
         logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
-        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
+        # /32 because KEM shared_secret is 32 bytes, /64 because sha3_512 output is 64 bytes
+
+        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + (64 * (OTP_PAD_SIZE // 64)) + ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
             logger.error("Contact (%s) gave us a otp batch message request with malformed strand plaintext length (%d)", contact_id, len(msgs_plaintext))
             return
 
         otp_hashchain_signature  = msgs_plaintext[1 + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
-        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:]
+        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1: ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32))]
+
+        xchacha_pads = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)):]
 
         contact_hash_chain = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
 
@@ -286,7 +296,6 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         our_kyber_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
         our_mceliece_key = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
 
-        # / 32 because shared secret is 32 bytes
         try:
             contact_kyber_pads = decrypt_shared_secrets(otp_hashchain_ciphertext[:ML_KEM_1024_CT_LEN * (OTP_PAD_SIZE // 32)], our_kyber_key, ML_KEM_1024_NAME)
         except Exception as e:
@@ -300,6 +309,8 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
             return
         
         contact_pads, _ = one_time_pad(contact_kyber_pads, contact_mceliece_pads)
+        contact_pads, _ = one_time_pad(contact_pads, xchacha_pads)
+
         contact_strand_key = contact_pads[:32]
         contact_pads = contact_pads[32:]
 

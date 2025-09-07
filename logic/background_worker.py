@@ -160,7 +160,7 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             else:
                 logger.error(
                         "Skipping data with unknown data type (%d) from contact (%s)...", 
-                        bytes([blob_plaintext[0]]),
+                        blob_plaintext[0],
                         sender
                     )
 

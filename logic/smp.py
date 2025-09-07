@@ -581,26 +581,26 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, cont
         
     elif smp_step == 3:
         if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
-            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
+            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request with invalid step. Ignoring it.", contact_id)
             return
 
         smp_step_3(user_data, user_data_lock, contact_id, message, ui_queue)
     elif smp_step == 4:
         if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
-            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
+            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request with invalid step. Ignoring it.", contact_id)
             return
 
         smp_step_4_request_answer(user_data, user_data_lock, contact_id, message, ui_queue)
 
     elif smp_step == 5:
         if (not user_data_copied["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"]): 
-            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request. Ignoring it.", contact_id)
+            logger.error("Contact (%s) is not pending verification, yet they sent us a SMP request with invalid step. Ignoring it.", contact_id)
             return
 
         smp_step_5(user_data, user_data_lock, contact_id, message, ui_queue)
 
     else:
-        logger.error("This is an impossible condition, You may have discovered a bug in Coldwire. Skipping weird SMP step (%d)...", smp_step)
+        logger.error("Skipping unknown SMP step (%d) from contact (%s)...", smp_step, contact_id)
         return
 
     save_account_data(user_data, user_data_lock)
