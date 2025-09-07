@@ -80,20 +80,20 @@ def encode_file(name: str, filename: str, data: bytes, boundary: str, CRLF: str,
 
 
 
-def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, blob: bytes = None, longpoll: int = None) -> dict:
+def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, blob: bytes = None, longpoll: int = None) -> bytes:
     if method.upper() not in ["POST", "GET", "PUT", "DELETE"]:
         raise ValueError(f"Invalid request method `{method}`")
 
    
     if method.upper() in ["POST", "PUT"]:
-        if metadata and blob:
+        if blob:
         
             # a-zA-Z0-9, same as what Chromium-based browser do.
             ALPHABET_ASCII  = string.ascii_letters + string.digits  
             ALPHABET_LENGTH = len(ALPHABET_ASCII)
 
             boundary = "WebKitFormBoundary"
-            boundary += ''.join(ALPHABET_ASCII[b % ALPHABET_LENGTH] for b in sha3_512(secrets.token_bytes(16)[:16]))
+            boundary += ''.join(ALPHABET_ASCII[b % ALPHABET_LENGTH] for b in sha3_512(secrets.token_bytes(16))[:16])
 
             CRLF = "\r\n"
             body = b""
@@ -101,8 +101,11 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
             if metadata is not None:
                 body += encode_field("metadata", json.dumps(metadata), boundary, CRLF)
             
-            if blob is not None:
-                body += encode_file("blob", "blob.bin", blob, boundary, CRLF)
+            body += encode_file("blob", "blob.bin", blob, boundary, CRLF)
+
+            if not body.endswith(CRLF.encode("utf-8")):
+                body += CRLF.encode("utf-8")
+
 
             body += f'--{boundary}--{CRLF}'.encode("utf-8")
 
@@ -110,7 +113,8 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
             req = request.Request(
                 url,
                 data = body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                method = method.upper()
             )
 
         elif metadata:
