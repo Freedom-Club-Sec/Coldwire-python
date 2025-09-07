@@ -23,7 +23,7 @@ def validate_identifier(identifier) -> bool:
         return False
 
     # Max domain length is 253 bytes
-    if len(split[1] > 253):
+    if len(split[1]) > 253:
         return False
 
 
