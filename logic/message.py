@@ -361,7 +361,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         next_hash_chain = sha3_512(contact_hash_chain + message_encrypted)
        
         if next_hash_chain != hash_chain:
-            logger.warning("Message hash chain did not match, this could be a possible replay attack, or a failed tampering attempt. Skipping this message...")
+            logger.error("Message hash chain did not match, this could be a possible replay attack, or a failed tampering attempt. Skipping this message...")
             return
 
 
