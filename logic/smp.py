@@ -513,7 +513,6 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
         )
     except Exception as e:
         logger.error("Failed to send SMP failure to contact (%s), either you are offline or the server is down. Error: %s", contact_id, str(e))
-        pass
   
 
 

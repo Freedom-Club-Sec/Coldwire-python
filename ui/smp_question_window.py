@@ -7,7 +7,9 @@ from logic.smp import (
         smp_step_4_answer_provided,
         smp_failure_notify_contact
 )
-
+from core.constants import (
+        SMP_QUESTION_MAX_LEN
+)
 class SMPQuestionWindow(tk.Toplevel):
     def __init__(self, master, contact_id, question):
         super().__init__(master)
@@ -21,10 +23,10 @@ class SMPQuestionWindow(tk.Toplevel):
         self.configure(bg="black")
 
         # Question label
-        # :512 to ensure no weird visual effects or even bufferoverflows can be exploited in the underlying tkinter library.
+        # :SMP_QUESTION_MAX_LEN to ensure no weird visual effects or even bufferoverflows can be exploited in the underlying tkinter library.
         tk.Label(
             self,
-            text="Question: " + question[:512],
+            text="Question: " + question[:SMP_QUESTION_MAX_LEN],
             fg="white",
             bg="black",
             font=("Helvetica", 10),

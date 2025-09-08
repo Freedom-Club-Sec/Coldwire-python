@@ -80,7 +80,7 @@ def encode_file(name: str, filename: str, data: bytes, boundary: str, CRLF: str,
 
 
 
-def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, blob: bytes = None, longpoll: int = None) -> bytes:
+def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, headers: dict = None, blob: bytes = None, longpoll: int = None) -> bytes:
     if method.upper() not in ["POST", "GET", "PUT", "DELETE"]:
         raise ValueError(f"Invalid request method `{method}`")
 
@@ -113,22 +113,26 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
             req = request.Request(
                 url,
                 data = body,
-                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                headers={"content-type": f"multipart/form-data; boundary={boundary}"},
                 method = method.upper()
             )
 
         elif metadata:
             metadata = json.dumps(metadata).encode("utf-8")
             req = request.Request(url, data=metadata, method=method.upper())
-            req.add_header("Content-Type", "application/json")
+            req.add_header("content-type", "application/json")
         else:
             raise ValueError("Request method is POST/PUT but no metadata nor blob were given.")
 
     else:
         req = request.Request(url, method=method.upper())
 
+    if headers is not None:
+        for key, value in headers.items():
+            req.add_header(key, value)
+
     if auth_token is not None:
-        req.add_header("Authorization", "Bearer " + auth_token)
+        req.add_header("authorization", "Bearer " + auth_token)
 
  
     # NOTE: urllib raises a HTTPError for status code >= 400
@@ -143,32 +147,3 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
 
 
 
-
-"""
-def http_request(url: str, method: str, auth_token: str = None, payload: dict = None, longpoll: int = -1) -> dict:
-    if payload:
-        payload = json.dumps(payload).encode()
-
-    if payload:
-        req = request.Request(url, data=payload, method=method.upper())
-        req.add_header("Content-Type", "application/json")
-    else:
-        req = request.Request(url, method=method.upper())
-    
-    if auth_token:
-        req.add_header("Authorization", "Bearer " + auth_token)
-
-    # NOTE: urllib raises a HTTPError for status code >= 400
-
-    try:
-        if longpoll == -1:
-            with request.urlopen(req) as response:
-                return json.loads(response.read().decode())
-        else:
-            with request.urlopen(req, timeout=longpoll) as response:
-                return json.loads(response.read().decode())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        logger.error("We received error from server: %s", body)
-        raise Exception(body)
-"""
