@@ -11,7 +11,7 @@ from core.trad_crypto import (
         derive_key_argon2id
 )
 from core.constants import (
-        ARGON2ID_OUTPUT_LEN,
+        ARGON2_OUTPUT_LEN,
         ARGON2_SALT_LEN,
 )
 
