@@ -383,34 +383,59 @@ However, implementations **MUST** still use cryptographically secure `CSPRNG` fo
 
 
 ### 7. Design choices (Questions & Answers)
-**Question**: 
+**Question**:
+
 Why did you opt for `xChaCha20Poly1305` over `ChaCha20Poly1305` if you're encrypting the nonce ?
 
 **Answer**: 
+
 Even though we do encrypt the nonce, encrypting the nonce does not prevent nonce-reuse attacks, it only hides the fact they occured. 
 `xChaCha20Poly1305` nonces are a lot larger than `ChaCha20Poly1305` nonces, which means the probablity of a collision is tiny.
 
+
+**Question**:
+
+Why did you opt for `xChaCha20Poly1305` over `AES-GCM-SIV` ?
+
+**Answer**: 
+
+We chose `xChaCha20Poly1305` over `AES-GCM-SIV` (or just `AES` as an algorithm in general) because the former is easier to implement in software, less vulnerable to side-channels, and does not depend on any black-box hardware "accelerators".
+
+
 **Question**
+
 Why did you opt for `OTP` encryption, if you're already using `xChaCha20Poly1305`, why not just use `xChaCha` alone ?
 
 **Answer**
+
 OTP encryption provides unique properties, and when combined with a classical symmetric algorithm, both algorithms benefit each other. On one hand, `xChaCha20Poly1305` encryption of `OTP`-encrypted messages, provides protection against `OTP` implementation errors, on the other hand, using `OTP`-encrypted messages as plaintext to `xChaCha20Poly1305` destroys one of cryptographors favorite oracles `known plaintext oracle`, which removes a whole class of attacks.
 
 Additionally, if the `OTP Batch` exchange was not intercepted nor logged, OTPs become unbreakable.
 
+
 **Question**
+
 Why do you generate random bytes of X size, then hash them with `SHA3_512` and truncate them back to X size ?
 
 **Answer**
 
-Nonce hiding: Prevents metadata leakage and hides rare nonce collisions.
+Using raw entropy does not guarantee it is uniform. As `CSPRNG` entropy is usually collected from device's sensors, and whatnot, a poorly made `CSPRNG` can have small biases, or even leak metadata. Hashing them with SHA3_512 helps "whiten" any potentinal issue.
 
-OTP usage: Provides additional protection even if XChaCha is broken. Makes known-plaintext attacks ineffective.
+The reason we use SHA3_512 specifically, and truncate to size we need, is actually 3 separate reasons:
+- Less code is called: Depending on one hashing algorithm, means we have to call less code with potentinally untrusted input. 
+- `SHA3_512` internal state can store more entropy than for instance `SHA3_256`.
+- `SHA3` in general, is proven to be better resistant to `Shor's` algorithm, which makes it better long-term than (for instance) `SHA2`.
+- 
 
-Composite security: Messages remain secure if an attacker breaks a single primitive; at least 3 primitives need to be broken for full compromise (ML-KEM, McEliece, XChaCha or SMP).
+**Question**
+Why do you use `Argon2id` instead of `Argon2i` or `Argon2d` ?
 
-xChaCha20-Poly1305 vs AES-GCM: Larger nonce, no hardware dependencies, reduces potential backdoors.
+**Answer**
+Because `Argon2id` combines both `Argon2i` and `Argon2d` providing more general protection, and is recommended variant as per `RFC 9106`.
 
-SHA3-512 whitening: Reduces CSPRNG bias and protects against metadata leakage.
 
-Argon2id for SMP: Protects against brute force attacks and Trust-On-First-Use style attacks.
+**Question**
+Why don't you use a NIST-approved algorithm instead of `Argon2id` ?
+
+**Answer**
+Because just because an algorithm is not NIST-approved, does not mean it's insecure. NIST tend to take their time standardizing and recommending algorithms, and `Argon2id` is relatively new. Even though `Argon2id` is on the newer side of things, it has won `Passowrd Hashing Competition` and has undergone many audits, and has been proven to be among the slowest, GPU-resistant hashing algorithms.
