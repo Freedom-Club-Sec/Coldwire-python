@@ -230,9 +230,11 @@ Answers don't have to be uncrackable forever, just uncrackable for a reasonable 
 We highly recommend implementations to only allow user to set a `8+ character` answer, and to check the entropy of provided answer (is all lowercase, is all uppercase, is only digits, etc), and to warn (or prevent) the user from continuing.
 
 Even though the `question` is encrypted, an active *Man-in-the-middle* adversary **can still retrieve it**. The verification would fail, but the adversary would have the `question` plaintext.
+
 This is acceptable, as the purpose of encrypting `SMP` process is to hide *metadata* against **passive** adversaries, not an **active** adversary. 
 
 The question **must not** contain any senstive data. And it must not contain any hints to the answer.
+
 Implementations **must** check `answer` and `question` in initation stage, to ensure neither contain the other.
 
 
@@ -278,77 +280,128 @@ PFS_PAYLOAD = PFS_TYPE || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATU
 #### 4.3. PFS Notes:
 Even though the use of hash-chains and signatures may appear redundant here, as we already wrap everything in `xChaCha20Poly1305`, and we encrypt its nonce, which serves as a replay protection, and tamper protection, the use of hash-chains here ensures that even if `xChaCha20Poly1305` is broken, PFS keys cannot be replayed, nor tampered with.
 
+The reason we opted for a hash-chain based design, instead of a simple counter, is to ensure metadata of how many key rotations occured never gets leaked, even when `xChaCha20Poly1305` is broken. 
+Even if `Alice's` or `Bob's` endpoint get compromised, no metadata of how many key rotation occured could be recovered.
 
-5. Messaging (MSGS)
-5.1 OTP Batch Generation
+### 5. Messaging (`MSGS`)
+#### 5.1 OTP Batch Generation (`Alice`)
+`Alice` uses `Bob's` `ML-KEM-1024` public-key to generates many shared secrets *in chunks*, concatenating them until their total size reaches (or exceeds) `OTP_PAD_SIZE` size (default `11264 bytes`).
 
-Alice checks if message length + OTP_SIZE_LENGTH ≤ available pad space:
+`Alice` does the same thing with `Classic-McEliece-8192128`.
 
-If not, she generates a new OTP batch.
+`Alice` generates random bytes of `OTP_PAD_SIZE` size, these are called `xChaCha_shared_secrets`
 
-Alice generates ML-KEM-1024 shared secrets in chunks until OTP_PAD_SIZE is reached.
+`Alice` signs all `KEM's` ciphertexts using her signing private key.
 
-Alice generates Classic McEliece shared secrets similarly.
+`Alice` generates new `ALICE_NEW_STRAND_NONCE` as always, and bundles in `OTP BATCH` type of `0x00`, and constructs the `MSG OTP request`:
+```
+MSG_REQUEST = MSG_TYPE || 0x00 || ALICE_NEW_STRAND_NONCE || OTP_BATCH_SIGNATURE || ML_KEM_1024_CIPHERTEXT || CLASSIC_MCELIESE_819_CIPHERTEXT || XCHACHA_SHARED_SECRETS
+```
 
-Alice generates OTP_PAD_SIZE of random bytes for XChaCha shared secrets.
+`Alice` encrypts the payload using her `ALICE_STRAND_KEY`, and her `ALICE_NEXT_STRAND_NONCE`, and sends payload to Bob.
 
-Alice generates a new hash chain seed MESSAGE_HASH_CHAIN_LEN (64 bytes).
+`Alice` then `XORs` `ML-KEM-1024's` shared secrets with `Classic-McEliece's` shared secrets, then she `XORs` the result with `XChaCha` secrets to produce the final result, the `ALICE_OTP_PADS`.
 
-Alice signs all ciphertexts using her signing key.
+The first `32 bytes` of pads become the new `ALICE_STRAND_KEY`, and is truncated from `ALICE_OTP_PADS`.
 
-Alice generates ALICE_NEW_STRAND_NONCE and prepares the payload:
+She saves her new `ALICE_STRAND_KEY`, and `ALICE_OTP_PADS`.
 
-MSG_TYPE || 0x00 || ALICE_NEW_STRAND_NONCE || HASH_CHAIN_SEED || OTP_BATCH_SIGNATURE || ML_KEM_1024_CIPHERTEXT || CLASSIC_MCELIESE_819_CIPHERTEXT || XCHACHA_SHARED_SECRETS
+These `ALICE_OTP_PADS` will be used to encrypt messages sent from `Alice` to `Bob`.
+
+#### 5.2 New OTP Batch Processing (`Bob`)
+`Bob` decrypts the `xChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
+`Bob` checks if request type is `MSG_TYPE`, then `Bob` checks the next byte if it's `0x00` (`New OTP Batch`), or `0x01` (New `OTP Message`)
+
+If its a `New OTP Batch`, `Bob`  verifies `OTP_BATCH_SIGNATURE` against `ML_KEM_1024_CIPHERTEXT` + `CLASSIC_MCELIESE_819_CIPHERTEXT`
+If invalid, abort, by skipping the request. Implementations are recommended to log and display the error to the user, so that they may be notified that someone attempted to MiTM against their conversation.
+
+If valid, `Bob` decapsulate `ML_KEM_1024_CIPHERTEXT` and `CLASSIC_MCELIESE_819_CIPHERTEXT` shared secrets.
+`Bob` then follows same exact forumla `Alice` did with her keys, `XOR-ing` `ML-KEM-1024's` shared secrets with `Classic-McEliece's` shared secrets, then she `XORs` the result with `XChaCha` secrets to produce the final result, the `ALICE_OTP_PADS`.
+
+The first `32 bytes` of pads become the new `ALICE_STRAND_KEY`, and are truncated from `ALICE_OTP_PADS`
+
+`Bob` updates `ALICE_NEXT_STRAND_NONCE` to be `ALICE_NEW_STRAND_NONCE`, then saves.
+
+These pads will be used to decrypt messages coming from `Alice`.
+
+#### 5.3 Message Sending
+`Alice` first `UTF-8` encodes her `message`, then she checks if (`message` size + `OTP_SIZE_LENGTH` size) ≤ available `ALICE_OTP_PADS`.
+
+If theres not enough pads for the message, she generates and sends a new OTP batch (see section 5.1 & 5.2).
+
+`Alice` performs `OTP` encryption on her message, using her pads as key.
+`OTP` encryption uses 2 models of padding, depending on the message's size.
+- If `message` length < `OTP_MAX_BUCKET` - `OTP_SIZE_LENGTH` (default `2 bytes`), pad to `OTP_MAX_BUCKET` (default `64 bytes`).
+
+- If `message` length > `OTP_MAX_BUCKET`, pad randomly up to `OTP_MAX_RANDOM_PAD` (default `16 bytes`).
+
+**All messages** are prefixed with a padding length field `OTP_SIZE_LENGTH` (`2 bytes` in `big-endian` format).
+
+After padding, the new padded message plaintext, is `OTP` encrypted.
+
+After encryption is complete, the `OTP pads` used for encryption **must** be truncated immeditely. Truncate pads *before* sending on wire, and even if request fail, never re-use nor undo truncation.
+
+`Alice`, as always, generates a new `ALICE_NEW_STRAND_NONCE`, and prepares the request data:
+```
+MSG_DATA = MSG_TYPE || 0x01 || ALICE_NEW_STRAND_NONCE || MESSAGE_ENCRYPTED
+```
+
+`0x01` indicates this is a MSG of type `New OTP Message`.
+
+`Alice` then encrypts `MSG_DATA` with `xChaCha20Poly1305` using `ALICE_STRAND_KEY`, and `ALICE_NEXT_STRAND_NONCE` as nonce, then sends it to `Bob`.
+
+#### 5.3 Receiving Messages (Bob)
+
+`Bob` decrypts the `xChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
+`Bob` checks if request type is `MSG_TYPE`, then `Bob` checks the next byte if it's `0x00` (`New OTP Batch`), or `0x01` (New `OTP Message`)
+
+if is `New OTP Message`, `Bob` decrypt the encrypted message with `ALICE_OTP_PADS`.
+`Bob` then reads the padding prefix of message, and removes the padding, then he removes the padding prefix.
+
+`Bob` then `UTF-8` decodes the message, and displays it.
+
+#### 5.4. MSGs Notes
+The reason we don't use a hash-chain like in `PFS`, is because the `xChaCha20Poly1305` wrapping `strand` scheme provides tampering and replay protection. And even if `xChaCha20Poly1305` is broken, messages that get tampered or replayed with, `Bob` would notice as the message content would be inparsable junk (at UTF-8 decoding step).
+
+Encrypting with `OTP` ensures that even if `xChaCha20Poly1305` is broken, and even if one `KEM` is broken, messages remain uncompromised.
+
+Even if `xChaCha20Poly1305` is broken, and 2 KEMs broken, messages remain uncompromised if the `OTP batch` request was not intercepted.
+
+If `OTP batch` request was not intercepted, messages become true OTPs.
+
+If `OTP batch` request is intercepted, `OTP` messages inherits the combined security of `xChaCha20Poly1305`, `ML-KEM-1024`, `Classic-McEliece-8192128`, and even the entropy of `SMP answer`.
+
+Additionally, using `OTPs` here provides an odd protection to `xChaCha20Poly1305`, by making "`known plaintext oracles`" attacks impossible, significantly bolstering `xChaCha20Poly1305` security.
+
+Additionally, using `OTPs` makes nonce reuses non-fatal, as we already encrypt nonces, the only possible way for an adversary on wire to know a nonce reuse occured, is if user types same message, with same key, with same nonce.
+
+Even if a ranodmly generated nonce was repeated, and the user does such unlikely thing, the fact plaintext is OTP encrypted, means the adversary would still see different ciphertexts. Making it impossible for them to know if a nonce reuse occured.
+Obviously, this does not mean a nonce reuse wouldn't occur, it just means an adversary wouldn't be able to exploit the fact because to him, is invisible random blobs.
+
+However, implementations **MUST** still use cryptographically secure `CSPRNG` for nonce generation nonetheless. This protection property only protects against the off chance a `CSPRNG` generated nonce gets duplicated.
 
 
-Alice encrypts using ALICE_STRAND_KEY and sends.
 
-Alice XORs ML-KEM, McEliece, and XChaCha secrets to produce OTP pads.
+### 7. Design choices (Questions & Answers)
+**Question**: 
+Why did you opt for `xChaCha20Poly1305` over `ChaCha20Poly1305` if you're encrypting the nonce ?
 
-The first 32 bytes of pads become the new ALICE_STRAND_KEY.
+**Answer**: 
+Even though we do encrypt the nonce, encrypting the nonce does not prevent nonce-reuse attacks, it only hides the fact they occured. 
+`xChaCha20Poly1305` nonces are a lot larger than `ChaCha20Poly1305` nonces, which means the probablity of a collision is tiny.
 
-5.2 Message Sending
+**Question**
+Why did you opt for `OTP` encryption, if you're already using `xChaCha20Poly1305`, why not just use `xChaCha` alone ?
 
-Alice UTF-8 encodes the message.
+**Answer**
+OTP encryption provides unique properties, and when combined with a classical symmetric algorithm, both algorithms benefit each other. On one hand, `xChaCha20Poly1305` encryption of `OTP`-encrypted messages, provides protection against `OTP` implementation errors, on the other hand, using `OTP`-encrypted messages as plaintext to `xChaCha20Poly1305` destroys one of cryptographors favorite oracles `known plaintext oracle`, which removes a whole class of attacks.
 
-Alice OTP encrypts the message with generated pads:
+Additionally, if the `OTP Batch` exchange was not intercepted nor logged, OTPs become unbreakable.
 
-If length < OTP_MAX_BUCKET - OTP_SIZE_LENGTH, pad to OTP_MAX_BUCKET.
+**Question**
+Why do you generate random bytes of X size, then hash them with `SHA3_512` and truncate them back to X size ?
 
-If length > OTP_MAX_BUCKET, pad randomly up to OTP_MAX_RANDOM_PAD.
-
-Prefix message with padding length (OTP_SIZE_LENGTH, 2 bytes, big-endian).
-
-Advance hash chain: SHA3-512(previous_hash_chain || encrypted_message)
-
-Generate ALICE_NEW_STRAND_NONCE.
-
-Prepare payload:
-
-MSG_TYPE || 0x01 || ALICE_NEW_STRAND_NONCE || HASH_CHAIN || MESSAGE_ENCRYPTED
-
-
-Encrypt with ALICE_STRAND_KEY using ALICE_NEXT_STRAND_NONCE and send.
-
-5.3 Receiving Messages (Bob)
-
-Decrypt payload using ALICE_STRAND_KEY and nonce.
-
-Verify hash chain.
-
-Decrypt message with OTP pads from OTP batch.
-
-Display message.
-
-6. Argon2id Parameters for SMP
-
-Memory: 3GB (3072 * 1024 KB)
-
-Iterations: 50,000
-
-Output: 64 bytes
-
-7. Design Notes
+**Answer**
 
 Nonce hiding: Prevents metadata leakage and hides rare nonce collisions.
 
