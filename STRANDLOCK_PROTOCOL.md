@@ -428,14 +428,37 @@ The reason we use SHA3_512 specifically, and truncate to size we need, is actual
 - 
 
 **Question**
+
 Why do you use `Argon2id` instead of `Argon2i` or `Argon2d` ?
 
 **Answer**
+
 Because `Argon2id` combines both `Argon2i` and `Argon2d` providing more general protection, and is recommended variant as per `RFC 9106`.
 
 
 **Question**
+
 Why don't you use a NIST-approved algorithm instead of `Argon2id` ?
 
 **Answer**
+
 Because just because an algorithm is not NIST-approved, does not mean it's insecure. NIST tend to take their time standardizing and recommending algorithms, and `Argon2id` is relatively new. Even though `Argon2id` is on the newer side of things, it has won `Passowrd Hashing Competition` and has undergone many audits, and has been proven to be among the slowest, GPU-resistant hashing algorithms.
+
+
+**Question**
+
+Why reinvent the wheel ? Why not adopt something like Signal's protocol ?
+
+**Answer**
+
+Even though Signal's protocol is well audited, and deployed widely, it offers bare minimum protection, with no overlapping layers, and no metadata protection. It works, it encrypts, it is safe against most "reasonable" adversaries. 
+But it does not fit our criteria nor objective with the `Strandlock` protocol. Our threat model is much more paranoid than Signal's in multiple ways, that adopting their protocol would make no sense.
+
+
+**Question**
+
+Why is the protocol name "Strandlock" ?
+
+**Answer**
+
+Because it combines cryptographic in a way that breaking one, two, or even three, does not break the entire protocol (or shall we say "strand"), sort of like a hair strand.
