@@ -29,48 +29,48 @@ If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `O
 
 For clarity, the following terms are used consistently throughout this specification:
 
-##### Request
+#### Request
 A generic protocol message sent from one party to another. A Request is not bound to `HTTP` or any specific transport mechanism; it may be carried over `TCP`, `UDP`, `sockets`, `pipes`, or any `communication medium`.
 
-##### Response
+#### Response
 The reply to a Request, carrying the necessary protocol data to complete or continue a Strandlock operation.
 We use term "Response" and "Request" interchangably. A response is a request.
 
-##### Session
+#### Session
 A logical state maintained between two parties that tracks shared secrets, nonces, and protocol progress. A session may span multiple Requests and Responses. Only one session is allowed per-contact. This protocol does not (and will not) support multi-devices, nor multi-session per same contact.
 
-##### Strand Nonce
+#### Strand Nonce
 A cryptographically secure random value used for entropy injection, whitening, and rotation. Strand nonces are exclusively used for `xChaCha20Poly1305` wrapping encryption. Every request contains the next nonce that will be used for the next request. Such nonces we call "Strand Nonces". Alice and Bob both save each other strand nonces.
 
-##### Strand Key
+#### Strand Key
 Any key material derived, rotated, or combined from multiple primitives within Strandlock. Strand Key is fed to `xChaCha20Poly1305` to "wrap encrypt" everything. Applies to PFS, MSGS requests and responses, but not SMP. SMP process uses a temporary key simply dubbed "Temporary xChaCha key" or "SMP key"
 
 
-##### SMP (Socialist Millionaire Protocol)
+#### SMP (Socialist Millionaire Protocol)
 An authentication mechanism used to confirm shared knowledge between two parties without revealing the secret itself.
 It does not refer to vanilla SMP, but refers to Off-the-record messaging-style `SMP`.
 
-##### OTP Batch
+#### OTP Batch
 A collection of one-time pad material derived from multiple primitives and signed before being used for message encryption.
 
 ### 2. General Protocol Features
 
-##### Request Types: 
+#### Request Types: 
 Every request includes a message type identifier, which may be visible only in the very first `SMP` stage request. For all other requests that come afterwards, the type is encrypted within the payload.
 
-##### Nonces:
+#### Nonces:
 Each request contains a `24-bytes nonce` immediately following the `type` field. These `nonces` are meant to be used for the next request to prevent metadata leakage, replay attacks, and on the small off-chance that a randomly generated nonce repeats twice, network adversaries wouldn't know a nonce reuse occured.
 
 Additionally, while all public security proofs of `xChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `xChaCha20Poly1305` against potentinal future attacks, leaving only open window through pure dumb brute-forcing of `32 bytes` key space.
 
-##### Encryption: 
+#### Encryption: 
 All payloads are encrypted with `XChaCha20Poly1305`, except for the `SMP` initiation stage.
 
-##### Human Verification: 
+#### Human Verification: 
 `SMP` enforces a human-verifiable question-and-answer process before any chat communication. This prevents "trust on first use"-style attacks that plagues other encrypted protocols.
 
-### 3. SMP (Socialist Millionaire Protocol)
-##### 3.1 Initialization (Alice -> Bob)
+### 3. Socialist Millionaire Protocol (`SMP`)
+#### 3.1 Initialization (`Alice` -> `Bob`)
 
 `Alice` selects an `SMP` question and answer and stores them locally.
 
@@ -82,7 +82,7 @@ All payloads are encrypted with `XChaCha20Poly1305`, except for the `SMP` initia
 
 The `payload` is prefixed with `SMP_TYPE = 0x00`.
 
-##### 3.2 Response (Bob -> Alice)
+#### 3.2 Initialization response (`Bob`)
 
 `Bob` generates a shared secret using `Alice’s` `ML-KEM-1024` public key (this is called temporary xchacha key, only used for `SMP` encryption).
 
@@ -107,7 +107,7 @@ SMP_TYPE || ALICE_ML_KEM_CIPHERTEXT || SMP_RESPONSE_CIPHERTEXT
 `Bob` saves `Alice` to his contact list locally, however `Bob` **must** flag `Alice` as `unverified` or `pending_verification`.
 `Bob` also stores all `nonces` and the `temporary XChaCha key` for this `SMP` session.
 
-##### 3.3 Proof 1 (`Alice's` proof of `Bob's` public-key)
+#### 3.3 Proof 1 (`Alice's` proof of `Bob's` public-key)
 
 `Alice` decapsulates the KEM ciphertext, derives shared secret to get the "temporary xChaCha key", then she decrypts the `XChaCha` ciphertext using the `temporary xChaCha key`.
 
@@ -153,7 +153,7 @@ SMP_REQUEST_DATA = SMP_TYPE || NEW_ALICE_STRAND_NONCE || ALICE_SIGNING_PUBLIC_KE
 
 `Alice` encrypts the payload with `XChaCha20` using `temporary xchacha key` as key, and uses `ALICE_NEXT_STRAND_NONCE` as nonce, and sends it to `Bob`
 
-##### 3.4 Verification & Proof 2 (`Bob`):
+#### 3.4 Verification & Proof 2 (`Bob`):
 
 `Bob` decrypts the payload with the `temporary key` and asks the user for an `SMP answer`.
 
@@ -200,7 +200,7 @@ BOB_STRAND_KEY   = XOR(BOB_STRAND_KEY, SHA3_512(ANSWER_SECRET))
 
 `Bob` then saves the new keys, and marks `Alice` as `SMP` verified.
 
-##### 3.5 Final Verification (`Alice`):
+#### 3.5 Final Verification (`Alice`):
 
 `Alice` decrypts `Bob’s` `SMP` payload and verifies `Bob’s` proof.
 
@@ -210,7 +210,7 @@ If valid, she applies the same `XOR` transformation to the `Strand Keys`, and sa
 
 `Alice` sends her first PFS keys.
 
-##### 3.6. Notes on SMP:
+#### 3.6. Notes on SMP:
 
 Step 1: No encryption
 
@@ -225,6 +225,8 @@ Do not confuse `Strand Nonces` with `SMP Nonces`, the latter is only used for SM
 
 The security of the `SMP` process depends entirely on the entropy of the user-provided `answer`, we use extreme `Argon2id` parameters to protect against a *"god-like"* adversary with virtually *unlimited* computing power, and we salt the answer to prevent *Rainbow-style* attacks. **However**, if `answer` is *low-entropy*, even such measures cannot completely prevent the cracking of the answer. 
 
+Answers don't have to be uncrackable forever, just uncrackable for a reasonable duration (minimum 1 week to months), our extreme `Argon2id` parameters achieve just that.
+
 We highly recommend implementations to only allow user to set a `8+ character` answer, and to check the entropy of provided answer (is all lowercase, is all uppercase, is only digits, etc), and to warn (or prevent) the user from continuing.
 
 Even though the `question` is encrypted, an active *Man-in-the-middle* adversary **can still retrieve it**. The verification would fail, but the adversary would have the `question` plaintext.
@@ -234,45 +236,48 @@ The question **must not** contain any senstive data. And it must not contain any
 Implementations **must** check `answer` and `question` in initation stage, to ensure neither contain the other.
 
 
-### 4. Perfect Forward Secrecy (PFS)
-##### 4.1 Key Rotation
+### 4. Perfect Forward Secrecy (`PFS`)
+#### 4.1 Key Rotation (`Alice`)
 
-Alice checks if a saved ALICE_KEYS_HASH_CHAIN exists:
+`Alice` checks if a saved `ALICE_KEYS_HASH_CHAIN` exists:
+- If not, she generates a new hash chain of size `KEYS_HASH_CHAIN_LEN` (default `64 bytes`).
+- Otherwise, she advances the hash chain by hashing the previous hash chain with `SHA3-512`, then output truncating to `KEYS_HASH_CHAIN_LEN`.
 
-If not, she generates a new hash chain of size KEYS_HASH_CHAIN_LEN.
+`Alice` generates new `ML-KEM-1024` key pairs.
 
-Otherwise, she advances the hash chain using SHA3-512.
+`Alice` checks if `Classic-McEliece` keys need rotation (by checking some `rotation_counter` and when it reaches a specific number, say `10`, it means its time to rotate, or, if `Alice` never sent any keys before).
 
-Alice generates new ML-KEM-1024 key pairs.
+`Alice` constructs `PUBLICKEYS_HASHCHAIN`:
+```
+hash_chain || ml_kem_1024_public_key || optional_classic_mceliece_8192128_public_key
+```
 
-Alice checks if McEliece keys need rotation (after 10 OTP batches or if never sent before).
+`Alice` signs `PUBLICKEYS_HASHCHAIN` with her signing key.
 
-Alice constructs publickeys_hashchain:
+`Alice` generates `ALICE_NEW_STRAND_NONCE`.
 
-hash_chain || ml_kem_1024_public_key || optional_classic_mceliece_8192128f_public_key
+`Alice` constructs `PFS` request:
+```
+PFS_PAYLOAD = PFS_TYPE || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATURE || PUBLICKEYS_HASHCHAIN
+```
 
-Alice signs publickeys_hashchain with her signing key.
+`Alice` then encrypts the `PFS_PAYLOAD`, with `xChaCha20Poly1305` using her `ALICE_STRAND_KEY` key, and using previous `ALICE_NEXT_STRAND_NONCE` as nonce. 
 
-Alice generates ALICE_NEW_STRAND_NONCE.
+#### 4.2 Receiving PFS Keys (`Bob`)
 
-Alice sends:
+`Bob` decrypts strand wrapper encryption with `xChaCha20Poly1305` using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
 
-PFS_TYPE || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATURE || PUBLICKEYS_HASHCHAIN
+`Bob` updates `ALICE_NEXT_STRAND_NONCE` with `ALICE_NEW_STRAND_NONCE`.
 
+`Bob` *verifies* hash chain and signature using `Alice` signing public-key.
 
-Encrypted using previous ALICE_NEXT_STRAND_NONCE.
+`Bob` determines which keys were sent (`ML-KEM-1024` only or `ML-KEM-1024` + `Classic-McEliece-8192128`), and saves them.
 
-4.2 Receiving PFS Keys (Bob)
+`Bob` then checks if he already sent keys to `Alice`, if he never sent any keys before to `Alice`, he performs the `4.1. Key Rotation` as well.
 
-Bob decrypts using ALICE_STRAND_KEY and ALICE_NEXT_STRAND_NONCE.
+#### 4.3. PFS Notes:
+Even though the use of hash-chains and signatures may appear redundant here, as we already wrap everything in `xChaCha20Poly1305`, and we encrypt its nonce, which serves as a replay protection, and tamper protection, the use of hash-chains here ensures that even if `xChaCha20Poly1305` is broken, PFS keys cannot be replayed, nor tampered with.
 
-Bob updates ALICE_NEXT_STRAND_NONCE.
-
-Bob verifies hash chain and signature.
-
-Bob determines which keys were sent (ML-KEM-1024 only or ML-KEM + McEliece) and saves them.
-
-If Bob has no new keys to send, he generates them similarly.
 
 5. Messaging (MSGS)
 5.1 OTP Batch Generation
