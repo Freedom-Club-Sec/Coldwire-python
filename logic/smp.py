@@ -371,6 +371,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
         user_data["contacts"][contact_id]["our_strand_key"]     = our_strand_key
         user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
 
+        user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] = None
 
 
 def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -> None:
@@ -519,7 +520,7 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
 def smp_unanswered_questions(user_data, user_data_lock, ui_queue):
     with user_data_lock:
         for contact_id in user_data["contacts"]:
-            if user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] and user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] == 2:
+            if user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] and user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] == 4:
                 logger.info("We had an unanswered question from contact (%s)", contact_id)
                 ui_queue.put({
                     "type": "smp_question",
