@@ -261,7 +261,6 @@ class ContactListWindow(tk.Tk):
     def new_contact(self, contact_id):
         with self.user_data_lock:
             contact_name = contact_id if not self.user_data["contacts"][contact_id]["nickname"] else self.user_data["contacts"][contact_id]["nickname"]
-            contact_is_verified = self.user_data["contacts"][contact_id]["lt_sign_key_smp"]["verified"]
 
         button = tk.Button(
             self.contact_frame,
@@ -283,8 +282,6 @@ class ContactListWindow(tk.Tk):
 
         # If no nickname is set
         if (contact_name == contact_id):
-            # We only allow setting nicknames after SMP verification succeeds 
-            if contact_is_verified:
                 context_menu.add_command(
                     label="Set nickname", 
                     command=lambda: self.change_contact_nickname(contact_id)
@@ -306,6 +303,14 @@ class ContactListWindow(tk.Tk):
         button.bind("<Button-2>", lambda event: context_menu.tk_popup(event.x_root, event.y_root))  # MacOS
 
     def change_contact_nickname(self, contact_id):
+        with self.user_data_lock:
+            contact_is_verified = self.user_data["contacts"][contact_id]["lt_sign_key_smp"]["verified"]
+
+        # We only allow setting nicknames after SMP verification succeeds 
+        if not contact_is_verified:
+            messagebox.showwarning("Pending Verification", "You can only assign a nickname once SMP verification is complete")
+            return
+
         ContactNicknamePrompt(self, contact_id)
 
     def remove_contact_nickname(self, contact_id):
