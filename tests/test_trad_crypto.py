@@ -10,6 +10,10 @@ from core.trad_crypto import (
         decrypt_xchacha20poly1305,
         derive_key_argon2id
 )
+from core.constants import (
+        ARGON2ID_OUTPUT_LEN,
+        ARGON2_SALT_LEN,
+)
 
 
 def test_aes_encrypt_decrypt():
@@ -21,8 +25,12 @@ def test_aes_encrypt_decrypt():
     key, salt = derive_key_argon2id(password)
     assert key != salt, "Derived key should not equal derived salt"
     assert key != password, "Derived key should not match plaintext password"
+    assert data != key, "Derived key should not match data"
+    assert data != salt, "Derived salt should not match data"
+    assert len(key) == ARGON2ID_OUTPUT_LEN, "key length does not match constant length"
+    assert len(salt) == ARGON2ID_SALT_LEN, "salt length does not match constant length"
 
-    # Encrypt plaintext using AES-GCM
+    # Encrypt plaintext using xChaCha20Poly1305
     nonce, ciphertext = encrypt_xchacha20poly1305(key, data)
     assert nonce != ciphertext, "Nonce and ciphertext should not be equal"
     assert ciphertext != data, "Ciphertext should differ from plaintext"
