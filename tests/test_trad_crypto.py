@@ -30,6 +30,8 @@ def test_aes_encrypt_decrypt():
     assert len(key) == ARGON2ID_OUTPUT_LEN, "key length does not match constant length"
     assert len(salt) == ARGON2ID_SALT_LEN, "salt length does not match constant length"
 
+    key = key[:32]
+
     # Encrypt plaintext using xChaCha20Poly1305
     nonce, ciphertext = encrypt_xchacha20poly1305(key, data)
     assert nonce != ciphertext, "Nonce and ciphertext should not be equal"

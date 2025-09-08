@@ -166,11 +166,6 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         message_encoded = message.encode("utf-8")
         try:
             # We one-time-pad encrypt the message with padding
-            #
-            # NOTE: The padding only protects short-messages which are easy to infer what is said based purely on message length 
-            # With messages larger than padding_limit, we assume the message entropy give enough security to make an adversary assumption
-            # of message context (almost) useless. 
-            #
             message_encrypted, new_pads = otp_encrypt_with_padding(message_encoded, our_pads)
             logger.debug("Our old pad size is %d and new size after the message is %d", len(our_pads), len(new_pads))
             break
@@ -186,10 +181,9 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
             
 
 
-    # Unlike in other functions, we truncate pads here and compute the next hash chain regardless of request being successful or not
+    # Unlike in other functions, we truncate pads here regardless of request being successful or not
     # because a malicious server could make our requests fail to force us to re-use the same pad for our next message 
     # which would break all of our security
-
     
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     
