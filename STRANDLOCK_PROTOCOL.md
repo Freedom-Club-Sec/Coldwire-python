@@ -1,16 +1,24 @@
 # Strandlock Protocol Specification
-Version: `1.0`
-Date: `2025-09-08`
-Author(s): `ChadSec1` (`Freedom Club Sec`)
+Version: **`1.0`**
+
+Date: **`2025-09-08`**
+
+Author(s): **`ChadSec1`** (**`Freedom Club Sec`**)
+
 Contact: github.com/Freedom-Club-Sec
-Status: `Draft`
+
+Status: **`Draft`**
+
 Intended Audience: Security engineers, cryptographers, protocol implementers
+
 ### 0. Overview
 
 The *`Strandlock`* Protocol is a composite encryption protocol designed to intertwine multiple cryptographic primitives to achieve robust security. Its purpose is to ensure that the compromise of one, two, or even three different cryptographic primitives does not jeopardize the confidentiality or integrity of messages.
 
 Even if `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
+
 If `xChaCha20poly1305` is broken, messages remain safe as long as (at least) one `KEM` is uncompromised.
+
 If `OTP` implementation has mistakes, messages remain safe as long as `xChaCha20Poly1305` is remains unbroken.
 
 If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `OTP batch` request was not intercepted nor logged, messages remain safe.
@@ -52,13 +60,14 @@ Every request includes a message type identifier, which may be visible only in t
 
 ##### Nonces:
 Each request contains a `24-bytes nonce` immediately following the `type` field. These `nonces` are meant to be used for the next request to prevent metadata leakage, replay attacks, and on the small off-chance that a randomly generated nonce repeats twice, network adversaries wouldn't know a nonce reuse occured.
+
 Additionally, while all public security proofs of `xChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `xChaCha20Poly1305` against potentinal future attacks, leaving only open window through pure dumb brute-forcing of `32 bytes` key space.
 
 ##### Encryption: 
 All payloads are encrypted with `XChaCha20Poly1305`, except for the `SMP` initiation stage.
 
 ##### Human Verification: 
-SMP enforces a human-verifiable question-and-answer process before any chat communication. This prevents "trust on first use"-style attacks that plagues other encrypted protocols.
+`SMP` enforces a human-verifiable question-and-answer process before any chat communication. This prevents "trust on first use"-style attacks that plagues other encrypted protocols.
 
 ### 3. SMP (Socialist Millionaire Protocol)
 ##### 3.1 Initialization (Alice -> Bob)
@@ -184,17 +193,18 @@ SMP_REQUEST_DATA = SMP_TYPE || BOB_NEW_STRAND_NONCE || BOB_PROOF_OF_ALICE || BOB
 
 `Bob` modifies both `ALICE_STRAND_KEY` and `BOB_STRAND_KEY` by `XOR-ing` each key with the `SHA3-512` hash of `ANSWER_SECRET`:
 ```
-
 ALICE_STRAND_KEY = XOR(ALICE_STRAND_KEY, SHA3_512(ANSWER_SECRET))
 BOB_STRAND_KEY   = XOR(BOB_STRAND_KEY, SHA3_512(ANSWER_SECRET))
 ```
+
+
 `Bob` then saves the new keys, and marks `Alice` as `SMP` verified.
 
-3.5 Final Verification (`Alice`):
+##### 3.5 Final Verification (`Alice`):
 
 `Alice` decrypts `Bob’s` `SMP` payload and verifies `Bob’s` proof.
 
-If valid, she applies the same XOR transformation to the `Strand Keys`, and saves them.
+If valid, she applies the same `XOR` transformation to the `Strand Keys`, and saves them.
 
 `Alice` marks `Bob` as verified.
 
@@ -212,11 +222,14 @@ Nonces are embedded in payloads, not sent in clear, except in step 2 and SMP fai
 
 Do not confuse `Strand Nonces` with `SMP Nonces`, the latter is only used for SMP process (as salt for `Argon2id`, etc, not for encryption), while the former is used in Step 3 and onwards, even in other requests types (`PFS`, `MSGS`, etc.)
 
+
 The security of the `SMP` process depends entirely on the entropy of the user-provided `answer`, we use extreme `Argon2id` parameters to protect against a *"god-like"* adversary with virtually *unlimited* computing power, and we salt the answer to prevent *Rainbow-style* attacks. **However**, if `answer` is *low-entropy*, even such measures cannot completely prevent the cracking of the answer. 
+
 We highly recommend implementations to only allow user to set a `8+ character` answer, and to check the entropy of provided answer (is all lowercase, is all uppercase, is only digits, etc), and to warn (or prevent) the user from continuing.
 
 Even though the `question` is encrypted, an active *Man-in-the-middle* adversary **can still retrieve it**. The verification would fail, but the adversary would have the `question` plaintext.
 This is acceptable, as the purpose of encrypting `SMP` process is to hide *metadata* against **passive** adversaries, not an **active** adversary. 
+
 The question **must not** contain any senstive data. And it must not contain any hints to the answer.
 Implementations **must** check `answer` and `question` in initation stage, to ensure neither contain the other.
 
