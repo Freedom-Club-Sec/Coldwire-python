@@ -27,8 +27,8 @@ def test_aes_encrypt_decrypt():
     assert key != password, "Derived key should not match plaintext password"
     assert data != key, "Derived key should not match data"
     assert data != salt, "Derived salt should not match data"
-    assert len(key) == ARGON2ID_OUTPUT_LEN, "key length does not match constant length"
-    assert len(salt) == ARGON2ID_SALT_LEN, "salt length does not match constant length"
+    assert len(key) == ARGON2_OUTPUT_LEN, "key length does not match constant length"
+    assert len(salt) == ARGON2_SALT_LEN, "salt length does not match constant length"
 
     key = key[:32]
 
