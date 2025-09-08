@@ -29,7 +29,6 @@ from core.crypto import (
 )
 from core.constants import ( 
     MSG_TYPE,
-    MESSAGE_HASH_CHAIN_LEN,
     OTP_MAX_BUCKET,
     OTP_PAD_SIZE,
     ML_KEM_1024_NAME,
@@ -78,12 +77,10 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
     otp_batch_signature = create_signature(ML_DSA_87_NAME, kyber_ciphertext_blob + mceliece_ciphertext_blob, our_lt_private_key)
 
-    hash_chain_seed = sha3_512(secrets.token_bytes(MESSAGE_HASH_CHAIN_LEN))
-
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            MSG_TYPE + b"\x00" + our_new_strand_nonce + hash_chain_seed + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob + xchacha_shared_secrets,
+            MSG_TYPE + b"\x00" + our_new_strand_nonce + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob + xchacha_shared_secrets,
             nonce = our_next_strand_nonce
         )
 
@@ -109,9 +106,8 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     with user_data_lock:
         user_data["contacts"][contact_id]["our_next_strand_nonce"]  = our_new_strand_nonce 
         user_data["contacts"][contact_id]["our_strand_key"]         = our_strand_key
-        user_data["contacts"][contact_id]["our_pads"]["pads"]       = pads[32:]
+        user_data["contacts"][contact_id]["our_pads"]               = pads[32:]
 
-        user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = hash_chain_seed
 
     save_account_data(user_data, user_data_lock)
 
@@ -137,7 +133,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         contact_kyber_public_key    = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
         contact_mceliece_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]
 
-        our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
+        our_pads = user_data["contacts"][contact_id]["our_pads"]
        
 
 
@@ -162,10 +158,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         
 
         with user_data_lock:
-            our_pads = user_data["contacts"][contact_id]["our_pads"]["pads"]
-             
-    with user_data_lock:
-        our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
+            our_pads = user_data["contacts"][contact_id]["our_pads"]             
 
 
 
@@ -182,15 +175,14 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
             logger.debug("Our old pad size is %d and new size after the message is %d", len(our_pads), len(new_pads))
             break
         except ValueError as e:
-            logger.debug("Failed to encrypt message to contact (%s) with error: %s", contact_id, str(e))
+            logger.debug("Couldnt encrypt message to contact (%s) with error: %s", contact_id, str(e))
             logger.info("Your message size (%d) when padded, is larger than our pads size (%s), therefore we are generating new pads for you", len(message), len(our_pads))
             
             if not generate_and_send_pads(user_data, user_data_lock, contact_id, ui_queue):
                 return False
 
             with user_data_lock:
-                our_pads        = user_data["contacts"][contact_id]["our_pads"]["pads"]
-                our_hash_chain  = user_data["contacts"][contact_id]["our_pads"]["hash_chain"]
+                our_pads = user_data["contacts"][contact_id]["our_pads"]
             
 
 
@@ -198,13 +190,11 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
     # because a malicious server could make our requests fail to force us to re-use the same pad for our next message 
     # which would break all of our security
 
-    next_hash_chain = sha3_512(our_hash_chain + message_encrypted)
     
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_pads"]["pads"]       = user_data["contacts"][contact_id]["our_pads"]["pads"][len(message_encrypted):]
-        user_data["contacts"][contact_id]["our_pads"]["hash_chain"] = next_hash_chain
+        user_data["contacts"][contact_id]["our_pads"] = user_data["contacts"][contact_id]["our_pads"][len(message_encrypted):]
 
         our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
 
@@ -215,7 +205,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            MSG_TYPE + b"\x01" + our_new_strand_nonce + next_hash_chain + message_encrypted,
+            MSG_TYPE + b"\x01" + our_new_strand_nonce + message_encrypted,
             nonce = our_next_strand_nonce
         )
    
@@ -273,16 +263,14 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
         # /32 because KEM shared_secret is 32 bytes, /64 because sha3_512 output is 64 bytes
 
-        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + (64 * (OTP_PAD_SIZE // 64)) + ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
+        if len(msgs_plaintext) != ( (ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)) + (64 * (OTP_PAD_SIZE // 64)) + ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
             logger.error("Contact (%s) gave us a otp batch message request with malformed strand plaintext length (%d)", contact_id, len(msgs_plaintext))
             return
 
-        otp_hashchain_signature  = msgs_plaintext[1 + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
-        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1: ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32))]
+        otp_hashchain_signature  = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN: ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
+        otp_hashchain_ciphertext = msgs_plaintext[ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1: ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32))]
 
-        xchacha_pads = msgs_plaintext[ML_DSA_87_SIGN_LEN + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)):]
-
-        contact_hash_chain = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN: MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
+        xchacha_pads = msgs_plaintext[ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1 + ((ML_KEM_1024_CT_LEN + CLASSIC_MCELIECE_8_F_CT_LEN) * (OTP_PAD_SIZE // 32)):]
 
         try:
             valid_signature = verify_signature(ML_DSA_87_NAME, otp_hashchain_ciphertext, otp_hashchain_signature, contact_public_key)
@@ -316,10 +304,9 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
 
         with user_data_lock:
-            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads
-            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = contact_hash_chain
+            user_data["contacts"][contact_id]["contact_pads"] = contact_pads
 
-            user_data["contacts"][contact_id]["contact_strand_key"]         = contact_strand_key
+            user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
             
@@ -344,25 +331,16 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
     elif msgs_plaintext[0] == 1:
         logger.debug("Received a new message from contact (%s).", contact_id)
 
-        if len(msgs_plaintext) < OTP_MAX_BUCKET + MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:
+        if len(msgs_plaintext) < OTP_MAX_BUCKET + XCHACHA20POLY1305_NONCE_LEN + 1:
             logger.error("Contact (%s) gave us a message request with malformed strand plaintext length (%d)", contact_id, len(msgs_plaintext))
             return
 
 
-        hash_chain        = msgs_plaintext[1 + XCHACHA20POLY1305_NONCE_LEN : MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1]
-        message_encrypted = msgs_plaintext[MESSAGE_HASH_CHAIN_LEN + XCHACHA20POLY1305_NONCE_LEN + 1:]
+        message_encrypted = msgs_plaintext[XCHACHA20POLY1305_NONCE_LEN + 1:]
 
         
         with user_data_lock:
-            contact_pads       = user_data["contacts"][contact_id]["contact_pads"]["pads"]
-            contact_hash_chain = user_data["contacts"][contact_id]["contact_pads"]["hash_chain"]
-
-        
-        next_hash_chain = sha3_512(contact_hash_chain + message_encrypted)
-       
-        if next_hash_chain != hash_chain:
-            logger.error("Message hash chain did not match, this could be a possible replay attack, or a failed tampering attempt. Skipping this message...")
-            return
+            contact_pads = user_data["contacts"][contact_id]["contact_pads"]
 
 
         if (not contact_pads) or (len(message_encrypted) > len(contact_pads)):
@@ -376,10 +354,9 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         contact_pads = contact_pads[len(message_encrypted):] 
 
 
-        # and save the new pads and the hash chain
+        # save the new pads 
         with user_data_lock:
-            user_data["contacts"][contact_id]["contact_pads"]["pads"]       = contact_pads
-            user_data["contacts"][contact_id]["contact_pads"]["hash_chain"] = next_hash_chain
+            user_data["contacts"][contact_id]["contact_pads"] = contact_pads
 
         save_account_data(user_data, user_data_lock)
 

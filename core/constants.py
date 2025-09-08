@@ -38,8 +38,6 @@ SMP_ANSWER_OUTPUT_LEN = 64
 SMP_QUESTION_MAX_LEN  = 512
 
 KEYS_HASH_CHAIN_LEN    = 64
-MESSAGE_HASH_CHAIN_LEN = 64
-
     
 
 # NIST-specified key sizes (bytes) and metadata
