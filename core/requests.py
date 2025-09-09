@@ -101,7 +101,10 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
             if metadata is not None:
                 body += encode_field("metadata", json.dumps(metadata), boundary, CRLF)
             
-            body += encode_file("blob", "blob.bin", blob, boundary, CRLF)
+            # typical maxmimum filename is around 255 characters long. 
+            blob_filename = ''.join(secrets.choice(ALPHABET_ASCII) for _ in range(secrets.randbelow(255) + 1))
+
+            body += encode_file("blob", blob_filename + ".bin", blob, boundary, CRLF)
 
             if not body.endswith(CRLF.encode("utf-8")):
                 body += CRLF.encode("utf-8")

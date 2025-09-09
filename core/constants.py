@@ -81,8 +81,8 @@ ALGOS_BUFFER_LIMITS   = {
 }
 
 # hash parameters
-ARGON2_MEMORY      = 1024 * 1024   # MB
-ARGON2_ITERS       = 2000
+ARGON2_MEMORY      = 1 * 1024**3   # GB
+ARGON2_ITERS       = 4
 ARGON2_OUTPUT_LEN  = 64           # bytes
 ARGON2_SALT_LEN    = 16           # bytes (Must be always 16 for interoperability with implementations using libsodium.)
 ARGON2_LANES       = 4

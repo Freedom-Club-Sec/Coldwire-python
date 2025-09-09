@@ -11,6 +11,7 @@ import core.trad_crypto as crypto
 import json
 import copy
 import logging
+import secrets
 
 
 logger = logging.getLogger(__name__)
@@ -36,10 +37,14 @@ def load_account_data(password = None) -> dict:
 
             user_data = json.loads(crypto.decrypt_xchacha20poly1305(password_kdf, blob[:12], blob[12:]))
 
-
+    
+    with open(Path("assets") / "browsers_headers.json", "r") as f:
+        browser_headers = json.load(f)
+        
 
     user_data["tmp"] = {
         "password": password,
+        "session_headers": secrets.choice(list(browser_headers.values())),
         "new_ml_kem_keys": {},
         "new_code_kem_keys": {}
     }
