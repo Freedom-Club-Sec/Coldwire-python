@@ -73,8 +73,9 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
  
     server_url       = user_data_copied["server_url"]
     auth_token       = user_data_copied["token"]
+    session_headers  = user_data_copied["tmp"]["session_headers"]
     
-    our_strand_key     = user_data_copied["contacts"][contact_id]["our_strand_key"]
+    our_strand_key   = user_data_copied["contacts"][contact_id]["our_strand_key"]
 
     rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
     rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
@@ -119,7 +120,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = ciphertext_blob, 
+            blob = ciphertext_blob,
+            headers = session_headers, 
             auth_token = auth_token
         )
     except Exception:

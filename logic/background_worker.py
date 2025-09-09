@@ -59,7 +59,7 @@ def parse_blobs(blobs: list[bytes]) -> dict:
     return parsed_messages
 
 def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
-    # Incase we received a SMP question request last time right before the background worker was about to exit
+    # Incase we received a SMP question request last time and user did not answer it.
     smp_unanswered_questions(user_data, user_data_lock, ui_queue)
 
     while not stop_flag.is_set():

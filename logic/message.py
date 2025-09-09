@@ -66,6 +66,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
 
         our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
 
+        session_headers  = user_data["tmp"]["session_headers"]
 
     kyber_ciphertext_blob   , kyber_shared_secrets    = generate_shared_secrets(contact_kyber_public_key, ML_KEM_1024_NAME)
     mceliece_ciphertext_blob, mceliece_shared_secrets = generate_shared_secrets(contact_mceliece_public_key, CLASSIC_MCELIECE_8_F_NAME)
@@ -90,6 +91,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
                 "recipient": contact_id
             }, 
             blob = ciphertext_blob, 
+            headers = session_headers, 
             auth_token = auth_token
         )
     except Exception:
@@ -130,6 +132,8 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
 
+        session_headers  = user_data["tmp"]["session_headers"]
+        
         contact_kyber_public_key    = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME]
         contact_mceliece_public_key = user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME]
 
@@ -208,6 +212,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
                 "recipient": contact_id
             }, 
             blob = ciphertext_blob, 
+            headers = session_headers, 
             auth_token = auth_token
         )
     except:

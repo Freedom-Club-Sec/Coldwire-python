@@ -66,13 +66,18 @@ def initiate_smp(user_data: dict, user_data_lock: threading.Lock, contact_id: st
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
+        session_headers = user_data["tmp"]["session_headers"]
     
     kem_private_key, kem_public_key = generate_kem_keys(ML_KEM_1024_NAME)
 
     try:
         response = http_request(f"{server_url}/data/send", "POST", metadata = {
-            "recipient": contact_id
-        }, blob = SMP_TYPE + kem_public_key, auth_token = auth_token)
+                "recipient": contact_id
+            }, 
+            headers = session_headers, 
+            blob = SMP_TYPE + kem_public_key, 
+            auth_token = auth_token
+        )
     except Exception as e:
         raise ValueError("Could not connect to server: " + str(e))
 
@@ -106,6 +111,7 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
         our_id     = user_data["user_id"]
+        session_headers = user_data["tmp"]["session_headers"]
 
     contact_kem_public_key = blob 
 
@@ -131,6 +137,7 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
                 "recipient": contact_id
             }, 
             blob = SMP_TYPE + key_ciphertext + ciphertext_nonce + ciphertext_blob, 
+            headers = session_headers, 
             auth_token = auth_token
         )
 
@@ -163,7 +170,8 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
         our_id     = user_data["user_id"]
-        
+        session_headers = user_data["tmp"]["session_headers"]
+
         question = user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"]
         answer = user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"]
 
@@ -216,7 +224,8 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
        http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = ciphertext_blob, 
+            blob = ciphertext_blob,
+            headers = session_headers, 
             auth_token = auth_token
         )
     except Exception:
@@ -287,6 +296,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
+        session_headers = user_data["tmp"]["session_headers"]
 
         contact_signing_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
         contact_kem_public_key     = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_kem_public_key"], validate = True)
@@ -347,7 +357,8 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = ciphertext_blob, 
+            blob = ciphertext_blob,
+            headers = session_headers, 
             auth_token = auth_token
         )
     except Exception:
@@ -493,6 +504,7 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
     with user_data_lock:
         server_url = user_data["server_url"]
         auth_token = user_data["token"]
+        session_headers = user_data["tmp"]["session_headers"]
 
         tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
 
@@ -508,7 +520,8 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = ciphertext_nonce + ciphertext_blob, 
+            blob = ciphertext_nonce + ciphertext_blob,
+            headers = session_headers, 
             auth_token = auth_token
         )
     except Exception as e:
