@@ -35,10 +35,13 @@ def authenticate_account(user_data: dict) -> dict:
     private_key = user_data["lt_auth_sign_keys"]["private_key"]
     public_key_encoded = user_data["lt_auth_sign_keys"]["public_key"]
     public_key_encoded = b64encode(public_key_encoded).decode()
-    user_id = user_data.get("user_id") or ""
+    user_id = user_data.get("user_id")
 
     try:
-        response = http_request(url + "/authenticate/init", "POST", metadata = {"public_key": public_key_encoded, "user_id": user_id })
+        if user_id:
+            response = http_request(url + "/authenticate/init", "POST", metadata = {"user_id": user_id })
+        else:
+            response = http_request(url + "/authenticate/init", "POST", metadata = {"public_key": public_key_encoded })
     except Exception:
         if user_data["settings"]["proxy_info"] is not None:
             raise ValueError("Could not connect to server! Are you sure your proxy settings are valid ?")
