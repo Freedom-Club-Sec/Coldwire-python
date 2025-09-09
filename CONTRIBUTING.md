@@ -26,6 +26,8 @@ Do not misunderstand, *include* the header (i.e. accept-encoding), but do not pu
 
 Instead, Spam "Coldwire" until the string reaches the same length of the intended "accept-encoding". Truncate "Coldwire" string as needed.
 
+Another important note, is to put the headers in the **exact** order, that the browser in question sends them in. Again, **do not** rely on Dev tools for this.
+
 And lastly, please do not contribute obsecure browsers headers! Keep all additions to be popular, mainstream browsers.
 
 
