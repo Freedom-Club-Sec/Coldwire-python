@@ -7,7 +7,7 @@ Author(s): **`ChadSec1`** (**`Freedom Club Sec`**)
 
 Contact: github.com/Freedom-Club-Sec
 
-Status: **`Draft`**
+Status: **`Work-in-progress`**
 
 Intended Audience: Security engineers, cryptographers, protocol implementers
 
@@ -170,13 +170,16 @@ metadata: {
     "recipient": "Bobs User_ID"
 }
 ```
+
 and bundled within the same request, is a `File Upload` with name `blob`, containing raw bytes (ciphertext, etc)
 
 #### 4.2. Data processor (`Server`)
 `Coldwire` server receives data request, verifies the `Alice's` `JWT token`, and checks if the `recipient` is all digits:
+
 if not, checks if `recipient` format is correct (i.e. "1234567890123456@example.com") and sends a request to the target `Coldwire` server.
 
 If `recipient` is all digits, the server checks if they exist in the local database, if not, they return a 400 error. 
+
 If they exist, the `Coldwire` server then processes the `blob`, rejecting it if it's empty.
 
 If the sender or `recipient` contain a "@", request is rejected.
@@ -185,10 +188,12 @@ The `Coldwire` server then process the request by constructing a payload which c
 ```
 payload = user_id_utf_8 + \x0 + blob
 ```
+
 Then the length of the `payload` is calculated, and a `length` prefix of size `3 bytes` in `big-endian` format is inserted at the start of the payload:
 ```
 payload = length_prefix + payload
 ```
+
 
 And the data is saved to the `recipient` inbox (any saving medium, can be Redis, SQL database, etc).
 
@@ -199,20 +204,58 @@ URL: example.com/data/longpoll
 ```
 
 The `Coldewire` server sends a response of either empty bytes, or many `message_payloads` continunesly concatenated together.
+
 After `Coldwire` server sends a response to `Bob`, it deletes all the previously saved data payloads queue.
 
 `Bob` client parses the response, by using the `length_prefix` at start of each message, `Bob` can separate each message. 
+
 `Bob` then further parses it, by separating a message sender, from the blob, by splitting on the first NULL byte (`\0`)
+
 `Bob` client verifies the format of the `sender` identifier is correct, simply dismissing message if not.
+
 `Bob` then processes the `blob` using the `Strandlock protocol`
 
 
 #### 4.4. Notes
 Replay protection, tampering protection, authentication, MiTM protection, etc, are all handled by the `Strandlock protocol`.
 
-The reason we send request in `Form` and `File Uploads`, and receive back response as `raw bytes`, is to save bandwidth. The `Strandlock protocol` can be quite heavy (some ciphertext reaching MBs in size).
+The reason we send request in `Form` and `File Uploads`, and receive back response as `raw bytes`, is to save bandwidth. 
+The `Strandlock protocol` can be quite heavy (some ciphertext reaching MBs in size).
 
 
 
+### 5. Federation
+Federation protocol between different `Coldwire` servers.
+
+All `Coldwire` servers must have a long-term `ML-DSA-87` keypair.
+
+All requests payloads and responses are returned in `JSON` format.
+
+
+#### 5.1. Federation Info
+When a `Coldwire` server (`server A`) process a request from another `Coldwire` server (`server B`), `server A` checks if they have `server B` public-key saved, if not, they fetch it by sending a `GET` request to the following endpoint:
+```
+URL: example.com/federation/info
+```
+
+The `server_B` constructs a response to be signed:
+```
+response = server_url_utf_8 + refetch_date_utf_8
+```
+`server_B_url_utf_8` being the server's own URL, and `refetch_date_utf_8` being the timestamp in UTC for when the requester should refetch the key again, in format:
+```
+%Y-%m-%d
+```
+
+`server B` signs the response with it's private signing key, and returns a `JSON` response of:
+```json
+{
+    "public_key": "base64_encoded_server_public_key"
+    "refetch_date": "UTC timestamp of when to refetch key"
+    "signature": "base64_encoded_response_signature"
+}
+```
+
+After `server A` receives the response from `server B`, they verify the signature. If valid, they save the `public_key` and `refetch_date` alongside `server B`'s` URL.
 
 
