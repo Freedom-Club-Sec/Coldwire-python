@@ -77,7 +77,10 @@ The HTTP specification requires it, needed incase a Coldwire server implementati
 In `Coldwire` there is no concept of `registration` or `login`, instead, a user generates their `ML-DSA-87` keypair, sends the `public_key` to server, then authenticates by signing the given challenge.
 
 The request payload **must** be in `JSON`, and the response will also be in `JSON`. 
+
 **note** that `JSON` requests and responses only applies for the *authentication API* endpoints.
+
+The `JWT` algorithm must be `HS512` (`SHA-3-512`)
 
 #### 3.1. Authentication Initialization (`Alice`)
 `Alice` sends an HTTP `POST` request to the endpoint running `Coldwire`
@@ -133,18 +136,19 @@ There is no expiration timestamp in the `JWT token`, the user simply keeps using
 Even though there are no expiration timestamp, client implementations must always authenticate on application startup.
 
 #### 3.3. Authentication Notes
-The reason we do include an expiration timestamp in the `JWT token` is to help reduce metadata emitting from both server, and client.
+The reason we do not include an "expiration timestamp" in the `JWT token`, is to help reduce metadata emitting from both the server, and the client.
 
 *Coldwire* server operators are recommended to rotate their `JWT secret` every month for cryptographic hyiegene, if you can rotate it more frequently, that is acceptable. The protocol does not enforce any `JWT secret` rotations.
 
 Additionally, even if a user's `JWT token` is compromised, no catastrophic security issues arise, except potential denial-of-service risks for the user. 
-Old messages cannot be retrieved and new messages cannot be read, contact list cannot be recovered, etc.
-New contacts can't be verified because the attacker wouldn't know a contact's `SMP` answer, only the real user does.
 
+Old messages cannot be retrieved and new messages cannot be read, full contact list cannot be recovered, etc.
+
+New contacts can't be verified because the attacker wouldn't know a contact's `SMP` answer, only the real user does.
 
 If a server `JWT secret` is compromised, no catastrophic security issues arise, except potential denial-of-service risks for the server and its users.
 
-The reason old and new messages cannot be read, is because we utilize the `Strandlock protocol` for true end-to-end encryption.
+The reason even new messages cannot be read, is because we utilize the `Strandlock protocol` for true end-to-end encryption.
 
 Messages are not just computationally safe, but in some scenarios, the message become uncrackable even with infinite computing power (to an adversary who only has access to a message's ciphertext, and not KEM's ciphertext, in which case OTP security inherits the algorithms in question security properties).
 
