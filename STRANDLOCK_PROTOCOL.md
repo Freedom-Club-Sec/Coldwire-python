@@ -124,7 +124,7 @@ ARGON2ID_SALT = SHA3-512(BOB_SMP_NONCE || ALICE_SMP_NONCE)[:16]
 
 `Alice` derives `answer_secret` using `Argon2id` with the `salt`, and the following paramaters:
 - Memory: 1 * 1024³ (1 Gigabyte)
-- Iterations: 24
+- Iterations: 25
 - Output: 64 bytes
 
 `Alice` computes `Bob’s` public-key fingerprint: 
