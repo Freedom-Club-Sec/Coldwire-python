@@ -23,7 +23,7 @@ class SMPSetupWindow(tk.Toplevel):
         # Instructions label
         tk.Label(
             self,
-            text="Pick a question that only you and your contact would know.\nCommunicate out-of-band if needed. Avoid anything guessable. No birthdays. No public facts.",
+            text="Ask a question that only you and your contact would know.\nCommunicate out-of-band if needed. Avoid anything guessable. No birthdays. No public facts.",
             fg="white",
             bg="black",
             font=("Helvetica", 10),

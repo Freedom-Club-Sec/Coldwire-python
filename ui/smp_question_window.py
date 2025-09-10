@@ -19,14 +19,27 @@ class SMPQuestionWindow(tk.Toplevel):
 
 
         self.title("Answer Verification Question")
-        self.geometry("400x200")
+        self.geometry("440x240")
         self.configure(bg="black")
 
+        # Warning label
+        tk.Label(
+            self,
+            text=f"`{contact_id}` wants to verify you.\nCommunicate out-of-band if you don't know an answer.",
+            fg="white",
+            bg="black",
+            font=("Helvetica", 10),
+            wraplength=380,
+            justify="left"
+        ).pack(pady=(10, 10))
+
+
+        tk.Label(self, text="Question:",  font=("Helvetica", 11), fg="white", bg="black", anchor="w").pack(fill="x", padx=20)
         # Question label
         # :SMP_QUESTION_MAX_LEN to ensure no weird visual effects or even bufferoverflows can be exploited in the underlying tkinter library.
         tk.Label(
             self,
-            text="Question: " + question[:SMP_QUESTION_MAX_LEN],
+            text=question[:SMP_QUESTION_MAX_LEN],
             fg="white",
             bg="black",
             font=("Helvetica", 10),
@@ -63,6 +76,7 @@ class SMPQuestionWindow(tk.Toplevel):
             messagebox.showerror("Error", "You need to provide an answer.")
             return
 
+        self.destroy()
+
         smp_step_4_answer_provided(self.master.user_data, self.master.user_data_lock, self.contact_id, answer, self.master.ui_queue)
 
-        self.destroy()
