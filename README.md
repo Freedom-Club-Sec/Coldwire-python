@@ -11,17 +11,17 @@
 ## 🔒 Security Model & Features
 - **Security**: Essentially unbreakable composite encryption scheme.
 - **Perfect-Forward-Secrecy**: Keys are rotated after use.
-- **Plausible Deniability**: messages are not cryptographically tied to you, providing more deniability than [Off‑The‑Record messaging](https://en.wikipedia.org/wiki/Off-the-record_messaging) !
-- **Mandatory SMP**: We enforce [Socialist millionaire problem](https://en.wikipedia.org/wiki/Socialist_millionaire_problem) before any chat. **MiTM attacks are impossible**.  
+- **Plausible Deniability**: messages are not cryptographically tied to you
+- **Mandatory SMP**: We *enforce* [Socialist millionaire problem](https://en.wikipedia.org/wiki/Socialist_millionaire_problem) before any chat to prevent **MiTM attacks**.  
 - **Minimal Attack Surface**:  
-  - Tkinter UI only, no embedded browsers or HTML
+  - Tkinter UI only, no embedded browsers nor HTML
   - Minimal Python dependecies
   - All untrusted inputs truncated to safe lengths to prevent buffer‑overflow in liboqs or Tk  
-- **Traffic obfuscation**: Network adversaries (ISP, etc) cannot easily censorship Coldwire, because we utilize HTTP(s).
+- **Traffic obfuscation**: Network adversaries (ISP, etc) cannot easily censorship nor detect Coldwire usage, because we have built-in protocol obfsucation support.
 - **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication.
 
 ## ⚠️ Disclaimer
-While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-Sec/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development. 
+While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-Sec/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development.
 
 **Do not** use for production‑grade secrecy until an formal audit is complete.
 
