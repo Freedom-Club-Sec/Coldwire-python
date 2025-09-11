@@ -67,6 +67,8 @@ If you rotate header sets between different requests, that creates a unique fing
 #### 2.2. Federated servers headers
 `Coldwire` server implementations *must* adhere to the following requirements for `HTTP` requests:
 - You **must not** include any headers that may indicate to a server you're intending to receive compressed (gzip, etc) response!
+ 
+- Your `Coldwire` server implementation **must not** return any compressed responses. Return responses as raw uncompressed bytes.
 
 - *All* `HTTP` field headers name **must** be lower-case, for compatiability with `HTTP/2` servers.
 The HTTP specification requires it, needed incase a Coldwire server implementation is behind another server.
@@ -231,12 +233,11 @@ The `Strandlock protocol` can be quite heavy (some ciphertext reaching MBs in si
 ### 5. Federation
 Federation protocol between different `Coldwire` servers.
 
-All `Coldwire` servers must have a long-term `ML-DSA-87` keypair.
-
-All requests payloads and responses are returned in `JSON` format.
-
+All `Coldwire` servers must have a long-term `ML-DSA-87` keypair saved securely, locally.
 
 #### 5.1. Federation Info
+All requests payloads and responses are sent and returned in `JSON` format.
+
 When a `Coldwire` server (`server A`) process a request from another `Coldwire` server (`server B`), `server A` checks if they have `server B` public-key saved, if not, they fetch it by sending a `GET` request to the following endpoint:
 ```
 URL: example.com/federation/info
@@ -263,3 +264,66 @@ response = server_url_utf_8 + refetch_date_utf_8
 After `server A` receives the response from `server B`, they verify the signature. If valid, they save the `public_key` and `refetch_date` alongside `server B`'s` URL.
 
 
+#### 5.2. Federation send
+When `Alice` who is using a Coldwire server (`server A`) sends `Bob` a request who is using another Coldwire server (`server B`), `server A` constructs a `Form` payload with field `metadata` and a `File Upload` with file name of `blob`.
+
+The `metadata` field payload data:
+```
+{
+    "recipient": "recipient 16-digits User-ID, no URL",
+    "sender": "sender 16-digits User-ID, no URL",
+    "url": "server_A URL with no HTTP/S prefixes."
+}
+```
+
+`server A` also creates a `ML-DSA-87- signature with following data:
+```
+signature = create_signature(ML_DSA_87_NAME, url.encode("utf-8") + recipient.encode("utf-8") + sender.encode("utf-8") + blob)
+```
+
+The `blob` field payload data:
+```
+blob_payload = signature + blob
+```
+`blob` being the ciphertext `Alice` is sending to `Bob.
+
+
+`server B` receives the request, processes it by doing sanity checks against the provided User-IDs (i.e., are they correct format, etc), and sanity checks against provided `url` (is it valid domain and or IP, etc), and it checks if `recipient` exists in the database. If any of checks failed, `server B` must return a 40x error code to `server A`.
+
+
+`server B` then checks if they have `server A` public-key saved, if not, they fetch and save it (see `5.1. Federation Info`).
+`server B` then checks the saved `server A's` refetch_date, if the date is due (=< today), `server B` refetches `server A` public-key.
+
+
+If all the previous checks and operations succeed, `server B` separates the `signature` from the `blob`:
+```
+signature = blob[:ML_DSA_87_SIGN_LEN]
+```
+And sets blob:
+```
+blob = blob[ML_DSA_87_SIGN_LEN:]
+```
+`ML_DSA_87_SIGN_LEN` being the signature length that `ML-DSA-87` produces (`4627 bytes`)
+
+Then, `server B` checks signature using `server A's` public-key.
+If not valid, `server B` returns a 40x error code.
+
+If valid:
+`server B` adds `url` to `sender`, separated by "`@`", then UTF-8 encoding it:
+```
+sender_with_url_utf_8 = sender + "@" + url
+sender_with_url_utf_8 = sender_with_url.encode("utf-8")
+```
+
+`server B` then checks if there's a NULL byte in `sender_with_url`, if there is, abort process, and return `40x` status code.
+
+If all checks pass, `server B` stores the data in same way described in `4.2. Data processor (Server)`:
+The `Coldwire` server then process the data by constructing a payload which consists of:
+```
+payload = sender_with_url_utf_8 + \x0 + blob
+```
+Then the length of the payload is calculated, and a length prefix of size `3 bytes` in `big-endian` format is inserted at the start of the payload:
+```
+payload = length_prefix + payload
+```
+And the data is saved to the recipient inbox (any saving medium, can be Redis, SQL database, etc).
