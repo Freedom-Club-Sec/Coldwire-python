@@ -17,7 +17,9 @@ The *`Coldwire`* Protocol is a federated, metadata-resistant, censorship-resista
 
 *`Coldwire`* protocol is designed to evade censorship, and usage detection, by network adversaries (LAN Router-controlling adversaries, ISP adversaries, etc) by blending in with regular browser traffic. It's also designed so that a malicious server, cannot replay nor tamper with requests, and cannot learn any metadata beyond the sender and receiver `User-IDs`.
 
-The protocol incorporates the `Strandlock` protocol, which is an end-to-end encrypted protocol. It handles confidentity, integrity, and authenticity in a user-to-user manner, making our protocol simple because we do not have to implement replay nor tampering protection ourselves, it is handled by the users.
+The protocol incorporates the `Strandlock` protocol, which is an end-to-end encrypted protocol. It handles confidentity, integrity, and authenticity in a user-to-user manner, making our protocol simple because we do not have to implement replay nor tampering protection ourselves, it is handled by the users. 
+
+Additionally, `Strandlock` protocol,  aids with traffic obfsucation by padding every request differently.
 
 ### 1. Terminology
 
