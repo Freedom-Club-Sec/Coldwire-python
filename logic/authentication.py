@@ -71,17 +71,11 @@ def authenticate_account(user_data: dict) -> dict:
 
     response = json.loads(response.decode())
 
-    required_keys = ["status", "user_id", "token"]
+    required_keys = ["user_id", "token"]
     missing = [k for k in required_keys if k not in response]
 
     if missing:
         raise ValueError("Server gave a malformed response! Are you sure this is Coldwire server ?")
-
-    if response["status"] != "success":
-        if "error" in response:
-            raise ValueError(response["error"])
-        else:
-            raise ValueError("Server gave an unknown error")
 
     user_data["user_id"] = response["user_id"]
     user_data["token"] = response["token"]
