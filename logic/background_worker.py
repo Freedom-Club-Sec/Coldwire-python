@@ -87,6 +87,7 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                     doseq = True,
                     longpoll = random_number_range(LONGPOLL_MIN, LONGPOLL_MAX)
                 )
+            acks = {}
         except TimeoutError:
             logger.debug("Data longpoll request has timed out, retrying...")
             continue
