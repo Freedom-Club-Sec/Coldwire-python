@@ -80,7 +80,7 @@ def encode_file(name: str, filename: str, data: bytes, boundary: str, CRLF: str,
 
 
 
-def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, headers: dict = None, blob: bytes = None, longpoll: int = None) -> bytes:
+def http_request(url: str, method: str, auth_token: str = None, metadata: dict = None, headers: dict = None, blob: bytes = None, longpoll: int = None, doseq: bool = False) -> bytes:
     if method.upper() not in ["POST", "GET", "PUT", "DELETE"]:
         raise ValueError(f"Invalid request method `{method}`")
 
@@ -128,7 +128,11 @@ def http_request(url: str, method: str, auth_token: str = None, metadata: dict =
             raise ValueError("Request method is POST/PUT but no metadata nor blob were given.")
 
     else:
-        req = request.Request(url, method=method.upper())
+        full_url = url
+        if metadata:
+            full_url += "?" + urllib.parse.urlencode(metadata, doseq=doseq)
+
+        req = request.Request(full_url, method=method.upper())
 
     if headers is not None:
         for key, value in headers.items():

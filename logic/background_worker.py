@@ -16,7 +16,7 @@ from core.crypto import random_number_range
 from core.trad_crypto import (
         decrypt_xchacha20poly1305
 )
-from base64 import b64decode
+from base64 import b64decode, urlsafe_b64encode
 import copy
 import logging
 
@@ -28,15 +28,18 @@ def decode_blob_stream(data: bytes) -> list:
 
     offset = 0
     while offset < len(data):
-        if offset + COLDWIRE_LEN_OFFSET > len(data):
+        if offset + COLDWIRE_LEN_OFFSET + 32 > len(data):
             raise ValueError("Incomplete length prefix, malformed or corrupted data.")
+
+        ack_id = data[offset : offset + 32]
+        offset += 32
 
         msg_len = int.from_bytes(data[offset : offset + COLDWIRE_LEN_OFFSET], "big")
         offset += COLDWIRE_LEN_OFFSET
         if offset + msg_len > len(data):
             raise ValueError("Incomplete message data")
 
-        messages.append(data[offset:offset + msg_len])
+        messages.append(ack_id + data[offset:offset + msg_len])
         offset += msg_len
     return messages
 
@@ -46,11 +49,14 @@ def parse_blobs(blobs: list[bytes]) -> dict:
 
     for raw in blobs:
         try:
+            ack_id = raw[:32]
+            raw = raw[32:]
             sender, blob = raw.split(b"\0", 1)
             sender = sender.decode("utf-8")
             parsed_messages.append({
                 "sender": sender,
-                "blob": blob
+                "blob": blob,
+                "ack_id": ack_id
                 })
         except ValueError as e:
             logger.error("Invalid message format! Error: %s", str(e))
@@ -61,6 +67,9 @@ def parse_blobs(blobs: list[bytes]) -> dict:
 def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
     # Incase we received a SMP question request last time and user did not answer it.
     smp_unanswered_questions(user_data, user_data_lock, ui_queue)
+
+    # Acknowledgements
+    acks = {}
 
     while not stop_flag.is_set():
         with user_data_lock:
@@ -73,6 +82,8 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                     f"{server_url}/data/longpoll", 
                     "GET", 
                     auth_token = auth_token, 
+                    metadata = acks if acks else None,
+                    doseq = True,
                     longpoll = random_number_range(LONGPOLL_MIN, LONGPOLL_MAX)
                 )
         except TimeoutError:
@@ -97,6 +108,13 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
             sender = message["sender"]
             blob   = message["blob"]
+
+            print("wtf you mean nigga?", message["ack_id"])
+            ack_id = urlsafe_b64encode(message["ack_id"]).decode().rstrip("=")
+            if "acks" not in acks:
+                acks["acks"] = [ack_id]
+            else:
+                acks["acks"].append(ack_id)
 
             with user_data_lock:
                 user_data_copied = copy.deepcopy(user_data)
