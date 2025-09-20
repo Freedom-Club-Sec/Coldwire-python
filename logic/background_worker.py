@@ -66,7 +66,8 @@ def parse_blobs(blobs: list[bytes]) -> dict:
 
 def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
     # Incase we received a SMP question request last time and user did not answer it.
-    smp_unanswered_questions(user_data, user_data_lock, ui_queue)
+    # NOTE: this is not needed anymore, as we have implemented acknowlegements
+    # smp_unanswered_questions(user_data, user_data_lock, ui_queue)
 
     # Acknowledgements
     acks = {}
@@ -109,7 +110,6 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             sender = message["sender"]
             blob   = message["blob"]
 
-            print("wtf you mean nigga?", message["ack_id"])
             ack_id = urlsafe_b64encode(message["ack_id"]).decode().rstrip("=")
             if "acks" not in acks:
                 acks["acks"] = [ack_id]
@@ -141,7 +141,8 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                             blob_plaintext = decrypt_xchacha20poly1305(chacha_key, contact_next_strand_nonce, blob)
 
                     except Exception as e:
-                        logger.error("Failed to decrypt blob from contact (%s) with error: %s", sender, str(e))
+                        logger.error("Failed to decrypt blob from contact (%s), we just going to treat blob as plaintext. Error: %s", sender, str(e))
+                        blob_plaintext = blob
                 else:
                     chacha_key = user_data["contacts"][sender]["contact_strand_key"]
 
