@@ -1,6 +1,6 @@
 from core.requests import http_request
 from logic.smp import smp_unanswered_questions, smp_data_handler
-from logic.pfs import pfs_data_handler, update_ephemeral_keys
+from logic.pfs import pfs_data_handler
 from logic.message import messages_data_handler
 from logic.user import validate_identifier
 from core.constants import (
@@ -100,10 +100,6 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             logger.debug("Received data: %s", str(message)[:3000])
 
             # Sanity check universal message fields
-            if (not "sender" in message):
-                logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with no sender...")
-                continue
-
             if not validate_identifier(message["sender"]):
                 logger.error("Impossible condition, either you have discovered a bug in Coldwire, or the server is attempting to denial-of-service you. Skipping data message with malformed sender identifier (%s)...", message["sender"])
                 continue
@@ -189,5 +185,5 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
         # TODO: We need to keep the last used key and use it when decapsulation with new key gives invalid output
         # because it might actually take some time for our keys to be uploaded to server + other servers, and to the contact.
         #
-        update_ephemeral_keys(user_data, user_data_lock)
+        # update_ephemeral_keys(user_data, user_data_lock)
 

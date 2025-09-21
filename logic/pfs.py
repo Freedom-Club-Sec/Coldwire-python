@@ -46,6 +46,43 @@ import queue
 logger = logging.getLogger(__name__)
 
 
+def send_pfs_ack(user_data: dict, user_data_lock: threading.Lock, contact_id: str, ui_queue: queue.Queue) -> None:
+    with user_data_lock:
+        server_url      = user_data["server_url"]
+        auth_token      = user_data["token"]
+        session_headers = user_data["tmp"]["session_headers"]
+    
+
+        our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
+        our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
+
+
+    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_xchacha20poly1305(
+            our_strand_key, 
+            PFS_TYPE + b"\x01" + our_new_strand_nonce,
+            nonce = our_next_strand_nonce
+        )
+
+    try:
+        http_request(f"{server_url}/data/send", "POST", metadata = {
+                "recipient": contact_id
+            }, 
+            blob = ciphertext_blob,
+            headers = session_headers, 
+            auth_token = auth_token
+        )
+    except Exception:
+        ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our ephemeral keys to the server"})
+        return
+
+    # We update at the very end to ensure if any of previous steps fail, we do not desync our state
+    with user_data_lock:
+        user_data["contacts"][contact_id]["our_next_strand_nonce"] = our_new_strand_nonce 
+
+
+    
+
 def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, contact_id: str, ui_queue: queue.Queue) -> None:
     """
     Generate, encrypt, and send fresh ephemeral keys to a contact.
@@ -70,12 +107,12 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
         # we put here because it could've change between time copy finished copying.
 
         our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
- 
+        our_strand_key   = user_data["contacts"][contact_id]["our_strand_key"]
+
     server_url       = user_data_copied["server_url"]
     auth_token       = user_data_copied["token"]
     session_headers  = user_data_copied["tmp"]["session_headers"]
     
-    our_strand_key   = user_data_copied["contacts"][contact_id]["our_strand_key"]
 
     rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
     rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
@@ -111,7 +148,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            PFS_TYPE + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
+            PFS_TYPE + b"\x00" + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
             nonce = our_next_strand_nonce,
             max_padding = 1024
         )
@@ -133,16 +170,15 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     with user_data_lock:
         user_data["contacts"][contact_id]["our_next_strand_nonce"] = our_new_strand_nonce 
 
-        user_data["tmp"]["new_ml_kem_keys"][contact_id] = {
-                "private_key": kyber_private_key,
-                "public_key": kyber_public_key
-            }
-        
+
+        user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = kyber_private_key
+        user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"] = kyber_public_key
+
+
         if rotate_mceliece:
-            user_data["tmp"]["new_code_kem_keys"][contact_id] = {
-                "private_key": mceliece_private_key,
-                "public_key": mceliece_public_key
-            }
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = mceliece_private_key
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = mceliece_public_key
+
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] = 0
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]        = CLASSIC_MCELIECE_8_F_ROTATE_AT
@@ -152,41 +188,6 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_hash_chain"] = our_hash_chain
 
-
-
-def update_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock) -> None:
-    """
-    Commit newly generated ephemeral keys to permanent storage.
-
-    - Moves keys from `user_data["tmp"]` into `user_data["contacts"]`.
-    - Clears temporary key buffers after update.
-    - Saves account state to disk.
-
-    Args:
-        user_data (dict): Shared user account state.
-        user_data_lock (threading.Lock): Lock protecting shared state.
-    """
-    with user_data_lock:
-        new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
-        new_code_kem_keys = user_data["tmp"]["new_code_kem_keys"]
-
-    for contact_id, v in new_ml_kem_keys.items():
-        with user_data_lock:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = v["private_key"]
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = v["public_key"]
-
-    for contact_id, v in new_code_kem_keys.items():
-        with user_data_lock:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = v["private_key"]
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = v["public_key"]
-
-
-    with user_data_lock:
-        user_data["tmp"]["new_ml_kem_keys"] = {}
-        user_data["tmp"]["new_code_kem_keys"] = {}
-
-    
-    save_account_data(user_data, user_data_lock)
 
 
 
@@ -206,6 +207,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         user_data_lock (threading.Lock): Lock protecting shared state.
         user_data_copied (dict): A read-only copy of user_data for consistency.
         ui_queue (queue.Queue): UI queue for notifications/errors.
+        contact_id (str): Sender ID.
         pfs_plaintext (bytes): Decrypted Incoming PFS plaintext from the server.
     
     Returns:
@@ -231,6 +233,33 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     if not contact_strand_key:
         logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
         return 
+
+    if pfs_plaintext[0] == 1:
+        logger.info("Received acknowlegement of PFS keys from contact %s", contact_id)
+        with user_data_lock:
+            user_data["contacts"][contact_id]["contact_next_strand_nonce"] = pfs_plaintext[1:]
+
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]
+
+            if user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]:
+                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
+                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]
+
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = None
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]  = None
+            
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = None
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]  = None
+
+        save_account_data(user_data, user_data_lock)
+        return
+
+    elif pfs_plaintext[0] == 0:
+        pfs_plaintext = pfs_plaintext[1:]
+    else:
+        logger.error("Skipping unknown PFS of type (%d) from contact (%s)", pfs_plaintext[0], contact_id)
+        return
 
 
     if (
@@ -283,6 +312,10 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         logger.info("contact (%s) has rotated their Kyber keys", contact_id)
 
 
+    logger.info("We are acknowledging contact's new PFS keys")
+    send_pfs_ack(user_data, user_data_lock, contact_id, ui_queue)
+
+
     with user_data_lock:
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce 
 
@@ -292,10 +325,11 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         our_kyber_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
         our_mceliece_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
 
-        new_ml_kem_keys = user_data["tmp"]["new_ml_kem_keys"]
-        new_code_kem_keys = user_data["tmp"]["new_code_kem_keys"]
 
-    if (our_kyber_private_key is None or our_mceliece_private_key is None) and ((contact_id not in new_ml_kem_keys) and (contact_id not in new_code_kem_keys)):
+        staged_kem_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
+        staged_code_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
+
+    if (our_kyber_private_key is None or our_mceliece_private_key is None) and ((staged_kem_private_key is None) and (staged_code_private_key is None)):
         logger.info("We are sending the contact (%s) our ephemeral keys because we didnt do it before.", contact_id)
         send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
 

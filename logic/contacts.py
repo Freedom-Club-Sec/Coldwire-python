@@ -83,6 +83,17 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                             "public_key": None,
                             "private_key": None,
                         },
+                    },
+                    "staged_keys": {
+                        CLASSIC_MCELIECE_8_F_NAME: {
+                            "public_key": None,
+                            "private_key": None,
+                        },
+                        ML_KEM_1024_NAME: {
+                            "public_key": None,
+                            "private_key": None,
+                        },
+
 
                     }
                 },

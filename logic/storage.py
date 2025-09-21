@@ -44,9 +44,7 @@ def load_account_data(password = None) -> dict:
 
     user_data["tmp"] = {
         "password": password,
-        "session_headers": secrets.choice(list(browser_headers.values())),
-        "new_ml_kem_keys": {},
-        "new_code_kem_keys": {}
+        "session_headers": secrets.choice(list(browser_headers.values()))
     }
 
     
@@ -66,6 +64,8 @@ def load_account_data(password = None) -> dict:
         except TypeError:
             pass
         
+
+        # In-use
         try:
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"], validate=True)
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"], validate=True)
@@ -77,6 +77,22 @@ def load_account_data(password = None) -> dict:
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"], validate=True)
         except TypeError:
             pass
+
+        # Staging
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"], validate=True)
+        except TypeError:
+            pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"], validate=True)
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64decode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"], validate=True)
+        except TypeError:
+            pass
+
+
+
 
         try:
             user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"] = b64decode(user_data["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"], validate=True)
@@ -157,6 +173,7 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
             pass
 
 
+        # In-use
         try:
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]).decode()
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"]).decode()
@@ -168,6 +185,20 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]).decode()
         except TypeError:
             pass
+
+        # Staging
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]).decode()
+        except TypeError:
+            pass
+
+        try:
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]).decode()
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = b64encode(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]).decode()
+        except TypeError:
+            pass
+
 
 
         

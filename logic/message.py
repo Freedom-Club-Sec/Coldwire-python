@@ -309,7 +309,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] += 1
             
-            new_ml_kem_keys  = user_data["tmp"]["new_ml_kem_keys"]
+            staged_kyber_private_key = bool(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"])
 
             rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"]
 
@@ -319,8 +319,9 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
         logger.info("Saved contact (%s) new batch of One-Time-Pads, new strand key, and new hash chain seed", contact_id)
         save_account_data(user_data, user_data_lock)
 
-
-        if contact_id not in new_ml_kem_keys:
+        # Why ???????
+        # Nvm, I know why, PFS.
+        if not staged_kyber_private_key:
             logger.info("Rotating our ephemeral keys") 
             send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
             save_account_data(user_data, user_data_lock)
