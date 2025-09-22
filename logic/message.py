@@ -28,7 +28,7 @@ from core.crypto import (
     otp_decrypt_with_padding
 )
 from core.constants import ( 
-    MSG_TYPE,
+    MSG_TYPES,
     OTP_MAX_BUCKET,
     OTP_PAD_SIZE,
     ML_KEM_1024_NAME,
@@ -81,7 +81,7 @@ def generate_and_send_pads(user_data, user_data_lock, contact_id: str, ui_queue)
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            MSG_TYPE + b"\x00" + our_new_strand_nonce + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob + xchacha_shared_secrets,
+            MSG_TYPES["MSG_BATCH"] + our_new_strand_nonce + otp_batch_signature + kyber_ciphertext_blob + mceliece_ciphertext_blob + xchacha_shared_secrets,
             nonce = our_next_strand_nonce
         )
 
@@ -203,7 +203,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
 
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            MSG_TYPE + b"\x01" + our_new_strand_nonce + message_encrypted,
+            MSG_TYPES["MSG_NEW"] + our_new_strand_nonce + message_encrypted,
             nonce = our_next_strand_nonce
         )
    
@@ -257,7 +257,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
 
    
-    if msgs_plaintext[0] == 0:
+    if bytes([msgs_plaintext[0]]) == MSG_TYPES["MSG_BATCH"]:
         logger.debug("Received a new OTP pads batch from contact (%s).", contact_id)
 
         # /32 because KEM shared_secret is 32 bytes, /64 because sha3_512 output is 64 bytes
@@ -328,7 +328,7 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
 
 
-    elif msgs_plaintext[0] == 1:
+    elif bytes([msgs_plaintext[0]]) == MSG_TYPES["MSG_NEW"]:
         logger.debug("Received a new message from contact (%s).", contact_id)
 
         if len(msgs_plaintext) < OTP_MAX_BUCKET + XCHACHA20POLY1305_NONCE_LEN + 1:

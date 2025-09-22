@@ -7,9 +7,9 @@ from core.constants import (
     LONGPOLL_MIN,
     LONGPOLL_MAX,
     COLDWIRE_LEN_OFFSET,
-    SMP_TYPE,
-    PFS_TYPE,
-    MSG_TYPE,
+    SMP_TYPES,
+    PFS_TYPES,
+    MSG_TYPES,
     XCHACHA20POLY1305_NONCE_LEN
 )
 from core.crypto import random_number_range
@@ -162,16 +162,16 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
 
             # SMP
-            if bytes([blob_plaintext[0]]) == SMP_TYPE:
-                smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext[1:])
+            if bytes([blob_plaintext[0]]) in SMP_TYPES.values():
+                smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext)
 
             # PFS
-            elif bytes([blob_plaintext[0]]) == PFS_TYPE:
-                pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext[1:])
+            elif bytes([blob_plaintext[0]]) in PFS_TYPES.values():
+                pfs_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext)
             
             # MSG
-            elif bytes([blob_plaintext[0]]) == MSG_TYPE:
-                messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext[1:])
+            elif bytes([blob_plaintext[0]]) in MSG_TYPES.values():
+                messages_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, sender, blob_plaintext)
 
             else:
                 logger.error(

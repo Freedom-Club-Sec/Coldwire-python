@@ -30,7 +30,7 @@ from core.trad_crypto import (
 )
 from base64 import b64encode, b64decode
 from core.constants import (
-        SMP_TYPE,
+        SMP_TYPES,
         SMP_NONCE_LENGTH,
         SMP_PROOF_LENGTH,
         SMP_QUESTION_MAX_LEN,
@@ -75,7 +75,7 @@ def initiate_smp(user_data: dict, user_data_lock: threading.Lock, contact_id: st
                 "recipient": contact_id
             }, 
             headers = session_headers, 
-            blob = SMP_TYPE + kem_public_key, 
+            blob = SMP_TYPES["SMP_INIT"] + kem_public_key, 
             auth_token = auth_token
         )
     except Exception as e:
@@ -136,7 +136,7 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = SMP_TYPE + key_ciphertext + ciphertext_nonce + ciphertext_blob, 
+            blob = SMP_TYPES["SMP_INIT"] + key_ciphertext + ciphertext_nonce + ciphertext_blob, 
             headers = session_headers, 
             auth_token = auth_token
         )
@@ -215,7 +215,7 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             chacha_key, 
-            SMP_TYPE + our_new_strand_nonce + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
+            SMP_TYPES["SMP_INIT"] + our_new_strand_nonce + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
             nonce = our_next_strand_nonce
         )
 
@@ -348,7 +348,7 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             tmp_key, 
-            SMP_TYPE + our_new_strand_nonce + our_proof + our_strand_key + contact_strand_key,
+            SMP_TYPES["SMP_INIT"] + our_new_strand_nonce + our_proof + our_strand_key + contact_strand_key,
             nonce = our_next_strand_nonce
         )
 
@@ -513,7 +513,7 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
     # it can be any number other than 2, we chose 7 because failure is *technically* the 7th smp step.
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
             tmp_key, 
-            SMP_TYPE + b"failure", 
+            SMP_TYPES["SMP_INIT"] + b"failure", 
             counter = 7
         )
     try:
@@ -550,12 +550,14 @@ def smp_data_handler(user_data, user_data_lock, user_data_copied, ui_queue, cont
     except Exception:
         smp_step = 2
 
-
     
     if user_data_copied["settings"]["ignore_new_contacts_smp"]:
         logger.info("Skipping SMP request because you have set to ignore new contacts requests.")
         return
 
+    
+    # TEMPORARIY, UNTIL WE REWORK SMP STEP HANDLING
+    message = message[1:]
 
     
     if message == b"failure":

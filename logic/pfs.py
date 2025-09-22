@@ -19,7 +19,7 @@ from core.crypto import (
     random_number_range
 )
 from core.constants import (
-    PFS_TYPE,
+    PFS_TYPES,
     ML_KEM_1024_NAME,
     ML_DSA_87_NAME,
     ML_KEM_1024_PK_LEN,
@@ -60,7 +60,7 @@ def send_pfs_ack(user_data: dict, user_data_lock: threading.Lock, contact_id: st
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            PFS_TYPE + b"\x01" + our_new_strand_nonce,
+            PFS_TYPES["PFS_ACK"] + our_new_strand_nonce,
             nonce = our_next_strand_nonce
         )
 
@@ -148,7 +148,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_strand_key, 
-            PFS_TYPE + b"\x00" + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
+            PFS_TYPES["PFS_NEW"] + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
             nonce = our_next_strand_nonce,
             max_padding = 1024
         )
@@ -234,7 +234,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
         return 
 
-    if pfs_plaintext[0] == 1:
+    if bytes([pfs_plaintext[0]]) == PFS_TYPES["PFS_ACK"]:
         logger.info("Received acknowlegement of PFS keys from contact %s", contact_id)
         with user_data_lock:
             user_data["contacts"][contact_id]["contact_next_strand_nonce"] = pfs_plaintext[1:]
@@ -242,7 +242,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]
 
-            if user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]:
+            if user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]:
                 user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
                 user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]
 
@@ -255,7 +255,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         save_account_data(user_data, user_data_lock)
         return
 
-    elif pfs_plaintext[0] == 0:
+    elif bytes([pfs_plaintext[0]]) == PFS_TYPES["PFS_NEW"]:
         pfs_plaintext = pfs_plaintext[1:]
     else:
         logger.error("Skipping unknown PFS of type (%d) from contact (%s)", pfs_plaintext[0], contact_id)

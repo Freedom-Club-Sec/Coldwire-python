@@ -6,9 +6,18 @@ APP_VERSION   = "0.1"
 ACCOUNT_FILE_PATH = "account.coldwire"
 
 # Coldwire protocol misc (bytes)
-SMP_TYPE = b"\x00"
-PFS_TYPE = b"\x01"
-MSG_TYPE = b"\x02"
+SMP_TYPES = {
+        "SMP_INIT": b"\x00"
+}
+PFS_TYPES = {
+        "PFS_NEW": b"\x01",
+        "PFS_ACK": b"\x02",
+}
+
+MSG_TYPES = {
+        "MSG_BATCH": b"\x03",
+        "MSG_NEW": b"\x04"
+}
 
 COLDWIRE_DATA_SEP   = b"\0"
 COLDWIRE_LEN_OFFSET = 3
