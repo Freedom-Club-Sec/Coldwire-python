@@ -33,7 +33,6 @@ from core.constants import (
         SMP_TYPES,
         SMP_NONCE_LENGTH,
         SMP_PROOF_LENGTH,
-        SMP_QUESTION_MAX_LEN,
         SMP_ANSWER_OUTPUT_LEN,
         ARGON2_SALT_LEN,
         ML_KEM_1024_NAME,
@@ -398,9 +397,6 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
 def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -> None:
     with user_data_lock:
-        server_url = user_data["server_url"]
-        auth_token = user_data["token"]
-
         answer = user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"]
 
         our_signing_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]

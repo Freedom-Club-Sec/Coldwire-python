@@ -1,4 +1,4 @@
-from urllib import request, error
+from urllib import request
 from core.trad_crypto import (
     sha3_512
 )

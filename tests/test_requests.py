@@ -11,7 +11,6 @@ Covers:
 import pytest
 import socket
 import json
-import types
 import socks
 from urllib import request as urllib_request
 from core import requests as core_requests

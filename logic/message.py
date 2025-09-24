@@ -40,7 +40,6 @@ from core.constants import (
     XCHACHA20POLY1305_NONCE_LEN
 
 )
-from base64 import b64decode, b64encode
 import secrets
 import logging
 
@@ -224,7 +223,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
             headers = session_headers, 
             auth_token = auth_token
         )
-    except:
+    except Exception:
         ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our message to the server"})
         return False
 

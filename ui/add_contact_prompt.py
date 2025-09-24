@@ -1,5 +1,7 @@
 from tkinter import messagebox
-from ui.utils import *
+from ui.utils import (
+        enhanced_entry
+)
 from logic.user import validate_identifier 
 from logic.contacts import save_contact
 from logic.storage import save_account_data

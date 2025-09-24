@@ -1,5 +1,7 @@
 from tkinter import messagebox
-from ui.utils import *
+from ui.utils import (
+        enhanced_entry
+    )
 from logic.contacts import generate_random_nickname
 from logic.storage import save_account_data
 import tkinter as tk

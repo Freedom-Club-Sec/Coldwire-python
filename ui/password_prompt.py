@@ -1,6 +1,8 @@
 import tkinter as tk
 from logic.storage import load_account_data
-from ui.utils import *
+from ui.utils import (
+        enhanced_entry
+)
 
 class PasswordPrompt(tk.Toplevel):
     def __init__(self, master, on_submit):

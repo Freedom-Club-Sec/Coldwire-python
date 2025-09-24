@@ -15,8 +15,7 @@ from logic.storage import save_account_data
 from core.crypto import (
     generate_kem_keys,
     verify_signature,
-    create_signature,
-    random_number_range
+    create_signature
 )
 from core.constants import (
     PFS_TYPES,
@@ -32,8 +31,7 @@ from core.constants import (
 )
 from core.trad_crypto import (
         sha3_512,
-        encrypt_xchacha20poly1305,
-        decrypt_xchacha20poly1305
+        encrypt_xchacha20poly1305
 )
 from base64 import b64encode, b64decode
 import secrets

@@ -1,5 +1,5 @@
 from core.requests import http_request
-from logic.smp import smp_unanswered_questions, smp_data_handler
+from logic.smp import smp_data_handler
 from logic.pfs import pfs_data_handler
 from logic.message import messages_data_handler
 from logic.user import validate_identifier
@@ -10,17 +10,15 @@ from core.constants import (
     SMP_TYPES,
     PFS_TYPES,
     MSG_TYPES,
-    XCHACHA20POLY1305_NONCE_LEN,
-    ML_KEM_1024_CT_LEN
+    XCHACHA20POLY1305_NONCE_LEN
 )
 from core.crypto import (
-        random_number_range,
-        decap_shared_secret
+        random_number_range
 )
 from core.trad_crypto import (
         decrypt_xchacha20poly1305
 )
-from base64 import b64decode, urlsafe_b64encode
+from base64 import urlsafe_b64encode
 import copy
 import logging
 

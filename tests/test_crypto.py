@@ -36,7 +36,6 @@ from core.constants import (
     CLASSIC_MCELIECE_8_F_CT_LEN 
 
 )
-from core.trad_crypto import sha3_512
 
 
 def test_random_number_range():

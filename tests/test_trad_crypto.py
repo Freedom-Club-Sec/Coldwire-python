@@ -46,5 +46,5 @@ def test_aes_encrypt_decrypt():
     tampered_ciphertext[-1] ^= 0xFF  # Flip last byte to corrupt data
 
     with pytest.raises(Exception):
-        decrypt_aes_gcm(key, nonce, bytes(tampered_ciphertext))
+        decrypt_xchacha20poly1305(key, nonce, bytes(tampered_ciphertext))
 
