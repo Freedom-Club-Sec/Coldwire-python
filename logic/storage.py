@@ -107,8 +107,8 @@ def load_account_data(password = None) -> dict:
 
 
         try:
-            user_data["contacts"][contact_id]["our_strand_key"]     = b64decode(user_data["contacts"][contact_id]["our_strand_key"], validate=True)
-            user_data["contacts"][contact_id]["contact_strand_key"] = b64decode(user_data["contacts"][contact_id]["contact_strand_key"], validate=True)
+            user_data["contacts"][contact_id]["our_next_strand_key"]     = b64decode(user_data["contacts"][contact_id]["our_next_strand_key"], validate=True)
+            user_data["contacts"][contact_id]["contact_next_strand_key"] = b64decode(user_data["contacts"][contact_id]["contact_next_strand_key"], validate=True)
         except TypeError:
             pass
 
@@ -215,8 +215,8 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
 
 
         try:
-            user_data["contacts"][contact_id]["our_strand_key"]     = b64encode(user_data["contacts"][contact_id]["our_strand_key"]).decode()
-            user_data["contacts"][contact_id]["contact_strand_key"] = b64encode(user_data["contacts"][contact_id]["contact_strand_key"]).decode()
+            user_data["contacts"][contact_id]["our_next_strand_key"]     = b64encode(user_data["contacts"][contact_id]["our_next_strand_key"]).decode()
+            user_data["contacts"][contact_id]["contact_next_strand_key"] = b64encode(user_data["contacts"][contact_id]["contact_next_strand_key"]).decode()
         except TypeError:
             pass
 

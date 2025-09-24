@@ -10,9 +10,14 @@ from core.constants import (
     SMP_TYPES,
     PFS_TYPES,
     MSG_TYPES,
-    XCHACHA20POLY1305_NONCE_LEN
+    XCHACHA20POLY1305_NONCE_LEN,
+    ML_KEM_1024_NAME,
+    ML_KEM_1024_CT_LEN
 )
-from core.crypto import random_number_range
+from core.crypto import (
+        random_number_range,
+        decap_shared_secret
+)
 from core.trad_crypto import (
         decrypt_xchacha20poly1305
 )
@@ -114,6 +119,11 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                 acks["acks"].append(ack_id)
 
             with user_data_lock:
+                try:
+                    user_data["contacts"][sender]["locked"] = True
+                except Exception:
+                    pass
+
                 user_data_copied = copy.deepcopy(user_data)
 
             # Everything from here is not validated by server
@@ -121,41 +131,31 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             blob_plaintext = None
             
             if sender in user_data_copied["contacts"]: 
-                chacha_key = user_data["contacts"][sender]["lt_sign_key_smp"]["tmp_key"]
-                contact_next_strand_nonce = user_data["contacts"][sender]["contact_next_strand_nonce"]
 
-                if chacha_key is not None:
-                    chacha_key  = b64decode(user_data["contacts"][sender]["lt_sign_key_smp"]["tmp_key"])
+                contact_next_strand_key   = user_data_copied["contacts"][sender]["contact_next_strand_key"]
+                contact_next_strand_nonce = user_data_copied["contacts"][sender]["contact_next_strand_nonce"]
 
+                if contact_next_strand_key and contact_next_strand_nonce:
                     try:
-                        try:
-                            blob_plaintext = decrypt_xchacha20poly1305(chacha_key, blob[:XCHACHA20POLY1305_NONCE_LEN], blob[XCHACHA20POLY1305_NONCE_LEN:])
-                        except Exception as e:
-                            if contact_next_strand_nonce is None:
-                                raise Exception("Unable to decrypt apparent SMP request due to missing contact strand nonce.")
+                        blob_plaintext = decrypt_xchacha20poly1305(contact_next_strand_key, contact_next_strand_nonce, blob)
 
-                            logger.debug("Failed to decrypt blob from contact (%s) probably due to invalid nonce: %s, we will try decrypting using strand nonce", sender, str(e))
-                            blob_plaintext = decrypt_xchacha20poly1305(chacha_key, contact_next_strand_nonce, blob)
+                        contact_next_strand_key   = blob_plaintext[:32]
+                        contact_next_strand_nonce = blob_plaintext[32:32 + XCHACHA20POLY1305_NONCE_LEN]
+                        blob_plaintext = blob_plaintext[32 + XCHACHA20POLY1305_NONCE_LEN:]
+
+                        with user_data_lock:
+                            user_data["contacts"][sender]["contact_next_strand_key"]   = contact_next_strand_key
+                            user_data["contacts"][sender]["contact_next_strand_nonce"] = contact_next_strand_nonce
 
                     except Exception as e:
-                        logger.error("Failed to decrypt blob from contact (%s), we just going to treat blob as plaintext. Error: %s", sender, str(e))
-                        blob_plaintext = blob
+                        logger.error("Unable to decrypt incoming data from contact (%s). Error: %s", sender, str(e))
+                        
+                        continue
                 else:
-                    chacha_key = user_data["contacts"][sender]["contact_strand_key"]
+                    # just assume at this point that it's not encrypted.
+                    logger.debug("Contact (%s) does not have a strand key and or a strand nonce! We will just gonna assume blob_plaintext = blob", sender)
+                    blob_plaintext = blob
 
-                    if (chacha_key is None) and (contact_next_strand_nonce is None):
-                        # just assume at this point that it's not encrypted.
-                        blob_plaintext = blob
-                    else:
-                        # Under known laws of physics, this should never fail. Unless the contact is acting funny on purpose / invalid implementation of Coldwire + strandlock protocol.
-                        try:
-                            blob_plaintext = decrypt_xchacha20poly1305(chacha_key, contact_next_strand_nonce, blob)
-                        except Exception as e:
-                            logger.error(
-                                    "Failed to decrypt blob from contact (%s)"
-                                    "We dont know what caused this except maybe a re-SMP verification. error: %s", sender, str(e)
-                                )
-                            blob_plaintext = blob
             else:
                 logger.debug("Contact (%s) not saved.. we just gonna assume blob_plaintext = blob", sender)
                 blob_plaintext = blob
@@ -180,10 +180,9 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
                         sender
                     )
 
-        # *Sigh* I had to put this here because if we rotate before finishing reading all of the messages
-        # we would overwrite our own key.
-        # TODO: We need to keep the last used key and use it when decapsulation with new key gives invalid output
-        # because it might actually take some time for our keys to be uploaded to server + other servers, and to the contact.
-        #
-        # update_ephemeral_keys(user_data, user_data_lock)
 
+            with user_data_lock:
+                try:
+                    user_data["contacts"][sender]["locked"] = False
+                except Exception:
+                    pass

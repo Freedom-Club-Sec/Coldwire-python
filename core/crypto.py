@@ -217,7 +217,7 @@ def decrypt_shared_secrets(ciphertext_blob: bytes, private_key: bytes, algorithm
         while len(shared_secrets) < size:
             ciphertext = ciphertext_blob[cursor:cursor + cipher_size]
             if len(ciphertext) != cipher_size:
-                 raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete ({len(ciphertext)})")
+                raise ValueError(f"Ciphertext of {algorithm} blob is malformed or incomplete ({len(ciphertext)})")
 
             shared_secret = kem.decap_secret(ciphertext)
             shared_secrets += shared_secret

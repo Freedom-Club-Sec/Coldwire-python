@@ -2,5 +2,6 @@ __pycache__/
 account.coldwire
 *.swp
 *.swo
+*.swn
 TODO.md
 TODO.txt

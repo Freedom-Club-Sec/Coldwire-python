@@ -41,6 +41,7 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
         
         user_data["contacts"][contact_id] = {
                 "nickname": None,
+                "locked": False,
                 "lt_sign_keys": {
                     "contact_public_key": None,
                     "our_keys": {
@@ -60,7 +61,6 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                     "contact_nonce": None,
                     "smp_step": None,
                     "tmp_proof": None,
-                    "tmp_key": None,
                     "contact_kem_public_key": None,
                     "our_kem_keys": {
                         "private_key": None,
@@ -97,8 +97,8 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
 
                     }
                 },
-                "our_strand_key": None,
-                "contact_strand_key": None,
+                "our_next_strand_key": None,
+                "contact_next_strand_key": None,
                 "our_next_strand_nonce": None,
                 "contact_next_strand_nonce": None,
                 "our_pads": None,

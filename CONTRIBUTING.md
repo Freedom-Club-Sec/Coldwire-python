@@ -40,7 +40,7 @@ Here are some features that we have decided against implementing after thoughtfu
 - Voice, and video calls.
 - Voice messages
 - Compression support
-- Metadata-rich features (avatars, vanity server-side usernames, bios, delievery receipts, read receipts, online status, last seen status, user-created server authentication passwords)
+- Metadata-rich features (avatars, vanity server-side usernames, about me, delievery receipts, read receipts, online status, last seen status, user-created server authentication passwords)
 - Account recovery
 - Persistent chat history
 - Any "convenience" features that could impact security and or privacy (clickable URLs, keyboard hotkeys, keyboard shortscuts beyond the basic CTRL-C CTRL-V) 

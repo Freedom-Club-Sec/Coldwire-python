@@ -69,7 +69,7 @@ def derive_key_argon2id(password: bytes, salt: bytes = None, output_length: int 
     ), salt
 
 
-def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, counter: int = None, counter_safety: int = 255, max_padding: int = XCHACHA20POLY1305_MAX_RANODM_PAD) -> tuple[bytes, bytes]:
+def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, max_padding: int = XCHACHA20POLY1305_MAX_RANODM_PAD) -> tuple[bytes, bytes]:
     """
     Encrypt plaintext using XChaCha20Poly1305.
 
@@ -79,8 +79,6 @@ def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None,
         key: A 32-byte XChaCha20Poly1305 key.
         plaintext: Data to encrypt.
         nonce: An (optional) nonce to be used.
-        counter: an (optional) number to add to nonce
-        counter_safety: an (optional) max counter number, to prevent counter overflow.
         max_padding: an (optional) maximum padding limit number to message. Cannot be larger than what `XCHACHA20POLY1305_MAX_RANODM_PAD` could store. Set to 0 for no padding.
     Returns:
         A tuple (nonce, ciphertext) where:
@@ -89,12 +87,6 @@ def encrypt_xchacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None,
     """
     if nonce is None:
         nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
-
-    if counter is not None:
-        if counter > counter_safety:
-            raise ValueError("ChaCha counter has overflowen")
-
-        nonce = nonce[:XCHACHA20POLY1305_NONCE_LEN - 1] + counter.to_bytes(1, "big")
 
     if max_padding < 0:
         raise ValueError(f"Max_padding is less than 0! ({max_padding})")

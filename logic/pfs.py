@@ -54,13 +54,14 @@ def send_pfs_ack(user_data: dict, user_data_lock: threading.Lock, contact_id: st
     
 
         our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
-        our_strand_key = user_data["contacts"][contact_id]["our_strand_key"]
+        our_next_strand_key   = user_data["contacts"][contact_id]["our_next_strand_key"]
 
 
-    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
-            our_strand_key, 
-            PFS_TYPES["PFS_ACK"] + our_new_strand_nonce,
+            our_next_strand_key, 
+            new_strand_key + new_strand_nonce + PFS_TYPES["PFS_ACK"],
             nonce = our_next_strand_nonce
         )
 
@@ -78,7 +79,8 @@ def send_pfs_ack(user_data: dict, user_data_lock: threading.Lock, contact_id: st
 
     # We update at the very end to ensure if any of previous steps fail, we do not desync our state
     with user_data_lock:
-        user_data["contacts"][contact_id]["our_next_strand_nonce"] = our_new_strand_nonce 
+        user_data["contacts"][contact_id]["our_next_strand_nonce"] = new_strand_nonce 
+        user_data["contacts"][contact_id]["our_next_strand_key"]   = new_strand_key 
 
 
     
@@ -107,7 +109,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
         # we put here because it could've change between time copy finished copying.
 
         our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
-        our_strand_key   = user_data["contacts"][contact_id]["our_strand_key"]
+        our_next_strand_key   = user_data["contacts"][contact_id]["our_next_strand_key"]
 
     server_url       = user_data_copied["server_url"]
     auth_token       = user_data_copied["token"]
@@ -145,10 +147,11 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     # Sign them with our per-contact long-term private key
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
     
-    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
-            our_strand_key, 
-            PFS_TYPES["PFS_NEW"] + our_new_strand_nonce + publickeys_hashchain_signature + publickeys_hashchain,
+            our_next_strand_key, 
+            new_strand_key + new_strand_nonce + PFS_TYPES["PFS_NEW"] + publickeys_hashchain_signature + publickeys_hashchain,
             nonce = our_next_strand_nonce,
             max_padding = 1024
         )
@@ -167,9 +170,9 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     
 
     # We update at the very end to ensure if any of previous steps fail, we do not desync our state
-    with user_data_lock:
-        user_data["contacts"][contact_id]["our_next_strand_nonce"] = our_new_strand_nonce 
-
+    with user_data_lock:  
+        user_data["contacts"][contact_id]["our_next_strand_nonce"] = new_strand_nonce 
+        user_data["contacts"][contact_id]["our_next_strand_key"]   = new_strand_key
 
         user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = kyber_private_key
         user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"] = kyber_public_key
@@ -224,21 +227,19 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         return
 
     contact_lt_public_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["contact_public_key"]
-    contact_strand_key = user_data_copied["contacts"][contact_id]["contact_strand_key"]
+    contact_next_strand_key = user_data_copied["contacts"][contact_id]["contact_next_strand_key"]
 
     if not contact_lt_public_key:
         logger.error("Contact (%s) per-contact ML-DSA-87 public key is missing! Skipping message..", contact_id)
         return 
 
-    if not contact_strand_key:
+    if not contact_next_strand_key:
         logger.error("Contact (%s) strand key key is missing! Skipping message...", contact_id)
         return 
 
     if bytes([pfs_plaintext[0]]) == PFS_TYPES["PFS_ACK"]:
         logger.info("Received acknowlegement of PFS keys from contact %s", contact_id)
         with user_data_lock:
-            user_data["contacts"][contact_id]["contact_next_strand_nonce"] = pfs_plaintext[1:]
-
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]
 
@@ -265,14 +266,13 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     if (
         (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) 
         or 
-        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + XCHACHA20POLY1305_NONCE_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN
+        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN
     ):
         logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
         return
 
-    contact_next_strand_nonce    = pfs_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
-    contact_hashchain_signature  = pfs_plaintext[XCHACHA20POLY1305_NONCE_LEN : ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN]
-    contact_publickeys_hashchain = pfs_plaintext[ML_DSA_87_SIGN_LEN + XCHACHA20POLY1305_NONCE_LEN:]
+    contact_hashchain_signature  = pfs_plaintext[: ML_DSA_87_SIGN_LEN]
+    contact_publickeys_hashchain = pfs_plaintext[ML_DSA_87_SIGN_LEN:]
 
     contact_hash_chain           = contact_publickeys_hashchain[:KEYS_HASH_CHAIN_LEN]
 
@@ -317,8 +317,6 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
 
 
     with user_data_lock:
-        user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce 
-
         user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
         user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = contact_kyber_public_key
 

@@ -18,8 +18,8 @@ from logic.pfs import send_new_ephemeral_keys
 from core.crypto import (
         generate_sign_keys, 
         generate_kem_keys,
-        encap_shared_secret,
-        decap_shared_secret,
+        decrypt_shared_secrets,
+        generate_shared_secrets,
         one_time_pad
 )
 from core.trad_crypto import (
@@ -119,24 +119,28 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
 
     our_nonce = sha3_512(secrets.token_bytes(SMP_NONCE_LENGTH))[:SMP_NONCE_LENGTH]
 
-    key_ciphertext, chacha_key = encap_shared_secret(contact_kem_public_key, ML_KEM_1024_NAME)
-    chacha_key = sha3_512(chacha_key)[:32]
+    key_ciphertexts, shared_secrets = generate_shared_secrets(contact_kem_public_key, ML_KEM_1024_NAME, size = 128)
 
+    our_strand_key          = shared_secrets[0:32]
+    contact_next_strand_key = shared_secrets[32:64]
+
+    our_next_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    
     our_next_strand_nonce     = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     contact_next_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
 
 
+
     ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
-            chacha_key, 
-            signing_public_key + our_nonce + our_next_strand_nonce + contact_next_strand_nonce, 
-            counter = 2
+            our_strand_key, 
+            our_next_strand_key + signing_public_key + our_nonce + our_next_strand_nonce + contact_next_strand_nonce
         )
 
     try:
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = SMP_TYPES["SMP_INIT"] + key_ciphertext + ciphertext_nonce + ciphertext_blob, 
+            blob = SMP_TYPES["SMP_INIT"] + key_ciphertexts + ciphertext_nonce + ciphertext_blob, 
             headers = session_headers, 
             auth_token = auth_token
         )
@@ -152,7 +156,6 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["pending_verification"] = True
 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"] = b64encode(our_nonce).decode()
-        user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"] = b64encode(chacha_key).decode()
 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_kem_public_key"] = b64encode(blob).decode()
         
@@ -161,6 +164,13 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["smp_step"] = 4
         
+        user_data["contacts"][contact_id]["our_next_strand_key"]     = our_next_strand_key
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
+
+        user_data["contacts"][contact_id]["our_next_strand_key"]     = our_next_strand_key
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
+
+
         user_data["contacts"][contact_id]["our_next_strand_nonce"]     = our_next_strand_nonce
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce
 
@@ -177,17 +187,21 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
         our_kem_private_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_kem_keys"]["private_key"])
 
-    key_ciphertext = blob[:ML_KEM_1024_CT_LEN]
+    key_ciphertexts = blob[:ML_KEM_1024_CT_LEN * 4]
 
-    chacha_key = decap_shared_secret(key_ciphertext, our_kem_private_key, ML_KEM_1024_NAME)
+    shared_secrets = decrypt_shared_secrets(key_ciphertexts, our_kem_private_key, ML_KEM_1024_NAME, size = 128)
+    contact_strand_key  = shared_secrets[0:32]
+    our_strand_key = shared_secrets[32:64]
 
-    chacha_key = sha3_512(chacha_key)[:32]
 
     smp_plaintext = decrypt_xchacha20poly1305(
-            chacha_key, 
-            blob[ML_KEM_1024_CT_LEN : ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN],
-            blob[ML_KEM_1024_CT_LEN + XCHACHA20POLY1305_NONCE_LEN:]
+            contact_strand_key, 
+            blob[len(key_ciphertexts) : len(key_ciphertexts) + XCHACHA20POLY1305_NONCE_LEN],
+            blob[len(key_ciphertexts) + XCHACHA20POLY1305_NONCE_LEN:]
         )
+
+    contact_next_strand_key = smp_plaintext[:32]
+    smp_plaintext = smp_plaintext[32:]
 
     contact_signing_public_key = smp_plaintext[:ML_DSA_87_PK_LEN]
     contact_nonce              = smp_plaintext[ML_DSA_87_PK_LEN: ML_DSA_87_PK_LEN + SMP_NONCE_LENGTH]
@@ -212,10 +226,11 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
     logger.debug("Our proof of contact (%s) public-key fingerprint: %s", contact_id, our_proof)
 
     
-    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
-            chacha_key, 
-            SMP_TYPES["SMP_INIT"] + our_new_strand_nonce + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
+            our_strand_key, 
+            new_strand_key + new_strand_nonce + SMP_TYPES["SMP_INIT"] + signing_public_key + our_nonce + our_proof + question.encode("utf-8"),
             nonce = our_next_strand_nonce
         )
 
@@ -240,12 +255,14 @@ def smp_step_3(user_data: dict, user_data_lock: threading.Lock, contact_id: str,
 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"] = b64encode(contact_nonce).decode() 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"]     = b64encode(our_nonce).decode()
-        user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"]       = b64encode(chacha_key).decode()
 
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"] = signing_private_key
         user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]  = signing_public_key
 
-        user_data["contacts"][contact_id]["our_next_strand_nonce"]     = our_new_strand_nonce
+        user_data["contacts"][contact_id]["our_next_strand_key"]     = new_strand_key
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
+
+        user_data["contacts"][contact_id]["our_next_strand_nonce"]     = new_strand_nonce
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce
 
 
@@ -256,16 +273,14 @@ def smp_step_4_request_answer(user_data, user_data_lock, contact_id, smp_plainte
     with user_data_lock:
         our_nonce = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"])
 
-
-    contact_new_strand_nonce = smp_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
     
-    contact_signing_public_key = smp_plaintext[XCHACHA20POLY1305_NONCE_LEN : ML_DSA_87_PK_LEN + XCHACHA20POLY1305_NONCE_LEN]
+    contact_signing_public_key = smp_plaintext[:ML_DSA_87_PK_LEN]
 
-    contact_nonce = b64encode(smp_plaintext[XCHACHA20POLY1305_NONCE_LEN + ML_DSA_87_PK_LEN : SMP_NONCE_LENGTH + ML_DSA_87_PK_LEN + XCHACHA20POLY1305_NONCE_LEN]).decode()
+    contact_nonce = b64encode(smp_plaintext[ML_DSA_87_PK_LEN : SMP_NONCE_LENGTH + ML_DSA_87_PK_LEN]).decode()
 
-    contact_proof = b64encode(smp_plaintext[XCHACHA20POLY1305_NONCE_LEN + SMP_NONCE_LENGTH + ML_DSA_87_PK_LEN : SMP_NONCE_LENGTH + SMP_PROOF_LENGTH + ML_DSA_87_PK_LEN + XCHACHA20POLY1305_NONCE_LEN]).decode()
+    contact_proof = b64encode(smp_plaintext[SMP_NONCE_LENGTH + ML_DSA_87_PK_LEN : SMP_NONCE_LENGTH + SMP_PROOF_LENGTH + ML_DSA_87_PK_LEN]).decode()
 
-    question      = smp_plaintext[SMP_NONCE_LENGTH + XCHACHA20POLY1305_NONCE_LEN + SMP_PROOF_LENGTH + ML_DSA_87_PK_LEN:].decode("utf-8")
+    question      = smp_plaintext[SMP_NONCE_LENGTH + SMP_PROOF_LENGTH + ML_DSA_87_PK_LEN:].decode("utf-8")
 
     if our_nonce == contact_nonce:
         logger.warning("SMP Verification failed at step 4: Contact nonce is the same as our nonce!")
@@ -277,8 +292,6 @@ def smp_step_4_request_answer(user_data, user_data_lock, contact_id, smp_plainte
     with user_data_lock: 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] = question
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_proof"] = contact_proof
-
-        user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_new_strand_nonce
 
         user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"] = contact_nonce
         
@@ -307,9 +320,11 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
 
         our_signing_public_key = user_data["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["public_key"]
 
+        our_next_strand_key     = user_data["contacts"][contact_id]["our_next_strand_key"]
+        contact_next_strand_key = user_data["contacts"][contact_id]["contact_next_strand_key"]
+
         our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
 
-        tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
 
     answer = normalize_answer(answer)
 
@@ -342,13 +357,11 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
 
-    our_strand_key     = sha3_512(secrets.token_bytes(32))[:32]
-    contact_strand_key = sha3_512(secrets.token_bytes(32))[:32]
-
-    our_new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
     _, ciphertext_blob = encrypt_xchacha20poly1305(
-            tmp_key, 
-            SMP_TYPES["SMP_INIT"] + our_new_strand_nonce + our_proof + our_strand_key + contact_strand_key,
+            our_next_strand_key, 
+            new_strand_key + new_strand_nonce + SMP_TYPES["SMP_INIT"] + our_proof,
             nonce = our_next_strand_nonce
         )
 
@@ -367,22 +380,20 @@ def smp_step_4_answer_provided(user_data, user_data_lock, contact_id, answer, ui
         return
 
 
-    our_strand_key, _     = one_time_pad(sha3_512(answer_secret)[:32], our_strand_key)
-    contact_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_strand_key)
+    # This transforms SMP key, making security reduction not only fall back to KEM, but also SMP answer's hashed entropy.
+    new_strand_key, _          = one_time_pad(sha3_512(answer_secret)[:32], new_strand_key)
+    contact_next_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_next_strand_key)
+
+    with user_data_lock:
+        user_data["contacts"][contact_id]["our_next_strand_nonce"]   = new_strand_nonce
+        user_data["contacts"][contact_id]["our_next_strand_key"]     = new_strand_key
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
 
 
     # We call smp_success at very end to ensure if the requests step fail, we don't alter our local state
     smp_success(user_data, user_data_lock, contact_id, ui_queue)
 
-    with user_data_lock:
-        user_data["contacts"][contact_id]["lt_sign_key_smp"]["answer"] = answer
 
-        user_data["contacts"][contact_id]["our_next_strand_nonce"]     = our_new_strand_nonce
-
-        user_data["contacts"][contact_id]["our_strand_key"]     = our_strand_key
-        user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
-
-        user_data["contacts"][contact_id]["lt_sign_key_smp"]["question"] = None
 
 
 def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -> None:
@@ -398,6 +409,8 @@ def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -
         our_nonce          = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["our_nonce"], validate=True)
         contact_nonce      = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["contact_nonce"], validate=True)
 
+        our_next_strand_key     = user_data["contacts"][contact_id]["our_next_strand_key"]
+        contact_next_strand_key = user_data["contacts"][contact_id]["contact_next_strand_key"]
 
 
     our_key_fingerprint = sha3_512(our_signing_public_key + our_kem_public_key)
@@ -410,13 +423,7 @@ def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -
     our_proof = our_nonce + contact_nonce + our_key_fingerprint
     our_proof = hmac.new(answer_secret, our_proof, hashlib.sha3_512).digest()
 
-    
-    contact_new_strand_nonce = smp_plaintext[:XCHACHA20POLY1305_NONCE_LEN]
-
-    contact_proof = smp_plaintext[XCHACHA20POLY1305_NONCE_LEN : SMP_PROOF_LENGTH + XCHACHA20POLY1305_NONCE_LEN]
-
-    contact_strand_key = smp_plaintext[XCHACHA20POLY1305_NONCE_LEN + SMP_PROOF_LENGTH : XCHACHA20POLY1305_NONCE_LEN + SMP_PROOF_LENGTH + 32]
-    our_strand_key     = smp_plaintext[XCHACHA20POLY1305_NONCE_LEN + SMP_PROOF_LENGTH + 32:] 
+    contact_proof = smp_plaintext[:SMP_PROOF_LENGTH]
 
     logger.debug("SMP Proof sent to us: %s", contact_proof)
     logger.debug("Our compute message: %s", our_proof)
@@ -430,15 +437,12 @@ def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -
         return
 
 
-    our_strand_key, _     = one_time_pad(sha3_512(answer_secret)[:32], our_strand_key)
-    contact_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_strand_key)
+    our_next_strand_key, _     = one_time_pad(sha3_512(answer_secret)[:32], our_next_strand_key)
+    contact_next_strand_key, _ = one_time_pad(sha3_512(answer_secret)[:32], contact_next_strand_key)
 
     with user_data_lock:
-        user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_new_strand_nonce
-
-        user_data["contacts"][contact_id]["our_strand_key"]     = our_strand_key
-        user_data["contacts"][contact_id]["contact_strand_key"] = contact_strand_key
-
+        user_data["contacts"][contact_id]["our_next_strand_key"]     = our_next_strand_key
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
 
 
 
@@ -455,6 +459,7 @@ def smp_step_5(user_data, user_data_lock, contact_id, smp_plaintext, ui_queue) -
 
 
 def smp_success(user_data, user_data_lock, contact_id, ui_queue) -> None:
+    logger.info("Successfully verified contact (%s).", contact_id)
     with user_data_lock:
         user_data["contacts"][contact_id]["lt_sign_key_smp"] = {
                 "verified": True,
@@ -465,7 +470,6 @@ def smp_success(user_data, user_data_lock, contact_id, ui_queue) -> None:
                 "contact_nonce": None,
                 "smp_step": None,
                 "tmp_proof": None,
-                "tmp_key": None,
                 "contact_kem_public_key": None,
                 "our_kem_keys": {
                     "private_key": None,
@@ -489,13 +493,18 @@ def smp_failure(user_data, user_data_lock, contact_id, ui_queue) -> None:
                 "contact_nonce": None,
                 "smp_step": None,
                 "tmp_proof": None,
-                "tmp_key": None,
                 "contact_kem_public_key": None,
                 "our_kem_keys": {
                     "private_key": None,
                     "public_key": None
                 }
         }
+
+        user_data["contacts"][contact_id]["our_next_strand_key"] = None
+        user_data["contacts"][contact_id]["contact_next_strand_key"] = None
+        user_data["contacts"][contact_id]["our_next_strand_nonce"] = None
+        user_data["contacts"][contact_id]["contact_next_strand_nonce"] = None
+
 
     ui_queue.put({"type": "showerror", "title": "Error", "message": "Verification has failed! Please re-try."})
 
@@ -506,27 +515,30 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
         auth_token = user_data["token"]
         session_headers = user_data["tmp"]["session_headers"]
 
-        tmp_key = b64decode(user_data["contacts"][contact_id]["lt_sign_key_smp"]["tmp_key"])
+        our_next_strand_key = user_data["contacts"][contact_id]["our_next_strand_key"]
+        our_next_strand_nonce = user_data["contacts"][contact_id]["contact_next_strand_nonce"]
 
-    smp_failure(user_data, user_data_lock, contact_id, ui_queue)
 
-    # it can be any number other than 2, we chose 7 because failure is *technically* the 7th smp step.
-    ciphertext_nonce, ciphertext_blob = encrypt_xchacha20poly1305(
-            tmp_key, 
-            SMP_TYPES["SMP_INIT"] + b"failure", 
-            counter = 7
+    # we don t need to save them.
+    new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
+    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_xchacha20poly1305(
+            our_next_strand_key, 
+            new_strand_key + new_strand_nonce + SMP_TYPES["SMP_INIT"] + b"failure", 
+            nonce = our_next_strand_nonce,
         )
     try:
         http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
-            blob = ciphertext_nonce + ciphertext_blob,
+            blob = ciphertext_blob,
             headers = session_headers, 
             auth_token = auth_token
         )
     except Exception as e:
         logger.error("Failed to send SMP failure to contact (%s), either you are offline or the server is down. Error: %s", contact_id, str(e))
   
+    smp_failure(user_data, user_data_lock, contact_id, ui_queue)
 
 
 def smp_unanswered_questions(user_data, user_data_lock, ui_queue):
