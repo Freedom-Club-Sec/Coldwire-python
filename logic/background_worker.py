@@ -11,7 +11,6 @@ from core.constants import (
     PFS_TYPES,
     MSG_TYPES,
     XCHACHA20POLY1305_NONCE_LEN,
-    ML_KEM_1024_NAME,
     ML_KEM_1024_CT_LEN
 )
 from core.crypto import (

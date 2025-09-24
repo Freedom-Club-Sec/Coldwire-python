@@ -19,7 +19,6 @@ from core.constants import (
     OTP_MAX_RANDOM_PAD,
     OTP_SIZE_LENGTH,
     OTP_MAX_BUCKET,
-    ML_KEM_1024_NAME,
     ML_KEM_1024_SK_LEN,
     ML_KEM_1024_PK_LEN,
     ML_DSA_87_NAME,
