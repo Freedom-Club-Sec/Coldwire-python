@@ -36,7 +36,7 @@ Here are some features that we have decided against implementing after thoughtfu
 - Media parsing or sending in any of its forms (images, videos, SVGs, etc)
 - Text formating or markup languages support (rich text formating, etc.)
 - Multi-device support for the same account.
-- Open/Public groups
+- Public group chats
 - Voice, and video calls.
 - Voice messages
 - Compression support
