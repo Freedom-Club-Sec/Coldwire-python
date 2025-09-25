@@ -17,7 +17,6 @@ The *`Strandlock`* Protocol is a composite encryption protocol designed to inter
 
 The protocol retains high-availability asynchronous behaviour, without reducing security and or privacy like similar protocols.
 
-
 If `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
 
 If `xChaCha20poly1305` is broken, messages remain safe as long as (at least) one `KEM` is uncompromised.
@@ -27,6 +26,9 @@ If `OTP` implementation has mistakes, messages remain safe as long as `xChaCha20
 If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `OTP batch` request was not intercepted nor logged, messages remain safe.
 
 All cryptographic primitives are not just stacked on top of each other, but interwined. Each primitive both aids each other, and acts as a fallback if one or more are broken.
+
+Strandlock protects confidentiality and anti-MITM in the active and passive-recording model (no endpoint compromise) by combining independent KEMs, per-message key rotation, and an OTP batch fallback. 
+See the full Threat Model section (7. Threat Model) for exact attacker capabilities and limits.
 
 
 *`Strandlock`* is transport-agnostic. It can operate over any underlying protocol, including federated chat systems like *`Coldwire`* or raw `TCP` sockets.
@@ -96,6 +98,12 @@ Actual "ratchet" and "perfect-forward secrecy" and "post-compromise security" ar
 When you longpoll for new data, each data is appended with a `32 byte` id, once you process all the data, you should send back the acknowledged ids, so that they may be deleted off the server.
 
 This applies to all requests.
+
+
+#### Server:
+A server implementing the strandlock protocol, generaly only sees ciphertext in, ciphertext out. And perhaps an identifier like a mailbox id.
+
+The server must store the ciphertext in the order they were sent in, and when fetched, the server must return the ciphertext in the same order.
 
 ### 3. Socialist Millionaire Protocol (`SMP`)
 #### 3.1 Initialization (`Alice` -> `Bob`)
@@ -426,8 +434,98 @@ Obviously, this does not mean a nonce reuse wouldn't occur, it just means an adv
 However, implementations **MUST** still use cryptographically secure `CSPRNG` for nonce generation nonetheless. This protection property only protects against the off chance a `CSPRNG` generated nonce gets duplicated.
 
 
+### 7. Threat Model
 
-### 7. Design choices (Questions & Answers)
+This section defines what Strandlock defends and what it explicitly does not. Readers and auditors should treat the capabilities below as explicit boundaries: guarantees only hold within these constraints.
+
+#### 7.1. Adversary Capabilities
+##### Passive network observer:
+- Can record all traffic indefinitely.
+- Has significant storage and compute resources.
+- May attempt to decrypt recorded messages later if primitives are broken.
+
+##### Active network adversary:
+-Can intercept, modify, inject, replay, and delay messages in real time.
+- Can attempt man-in-the-middle (MITM) during initial `SMP` initiation.
+
+##### Cryptanalytic attacker:
+- May eventually break one or more cryptographic primitives (e.g. a single KEM, symmetric cipher, or hash function).
+- Breaking multiple primitives simultaneously is assumed to be infeasible.
+
+##### Compromised server/relay:
+- May attempt to manipulate metadata, delay or replay traffic, or observe message flow patterns.
+- Cannot read, tamper, nor replay data without breaking the protocol.
+
+#### 7.2. Adversary profiles
+The following profiles illustrate typical adversaries considered under this threat model. They are not exhaustive but cover a wide range of realistic threats.
+
+##### Opportunistic attacker
+Individual or small group with limited resources.
+- May control a single server, home network
+- May have access to a single GPU farm, or a small botnet.
+- Relies primarily on weak SMP answers, poor user choices, to conduct TOFU-style attacks.
+- Cannot break cryptographic primitives.
+- Could cause denial-of-service attacks against clients and or server.
+
+Safety Requirements:
+- SMP anwer that's equal or greater than 6 bytes of entropy, and that is not a public knowledge.
+
+##### Organized criminal group
+Medium-scale adversary with access to large GPU/CPU clusters, and or a large botnet (~100000 average-desktop devices).
+- Capable of monitoring large network segments and recording high-volume traffic.
+- Can attempt real-time active attacks (MITM, replay) against targets of interest.
+- Relies primarily on weak SMP answers, poor user choices, to conduct TOFU-style attacks.
+- Cannot cryptographic primitives through pure brute force, but may target implementation mistakes (low probability).
+- Could cause denial-of-service attacks against clients and or server.
+
+Safety Requirements:
+- SMP anwer that's equal or greater than 10 bytes of entropy, and that is not a public knowledge.
+
+##### Nation-state adversary
+Large-scale surveillance capability (backbone-level passive collection), access to powerful computing power through dedicated GPU and CPU clusters, and has access to quantum computers.
+- Access to exascale computing resources, custom ASICs, and cryptanalytic expertise, and quantum computers.
+- Can sustain long-term traffic analysis.
+- Assumed capable of breaking one or two primitives eventually, but unlikely all cryptographic primitives (we use multiple algorithms, all based on different mathematical).
+- Still relies primarily on weak SMP answers, or poor user choices, to conduct TOFU-style attacks.
+- May exploit memory corruption vulnerabilities in the underlying cryptographic primitives implementations, and or in the application implementing the Strandlock protocol. 
+- Low probability for the Strandlock-implementing application to have protocol-related memory-corruption bugs as the protocol only support raw text messages.
+- Could cause denial-of-service attacks against clients and or server.
+
+Safety Requirements:
+- SMP anwer that's equal or greater than 32 bytes of entropy, and that is not a public knowledge.
+- Correct implementations of all cryptographic primitives
+- Safely handling over-the wire ciphertext, and truncating it to safe length before decapsulating, or verifying signatures, to prevent buffer-overflows.
+- The use of memory-safe languages for the implementations, such as Rust.
+
+
+#### 7.3. Explicit Exclusions
+
+The protocol does not protect against:
+- Endpoint compromise: malware implants, malicious firmware, physical access, or key extraction from a participant’s device.
+- Weak human secrets: extremely low-entropy & predictable SMP answers (e.g. “1234”) chosen by users.
+- Side-channel attacks: timing, power analysis, cache leaks, or memory dumps.
+- Social engineering: phishing, coercion, or tricking a user into revealing message(s) content, or the SMP answer.
+
+#### 7.4. Security Guarantees
+Under the stated model and assuming correct implementation:
+
+- Confidentiality: Messages remain confidential against a passive adversary even if one or two cryptographic primitive is broken.
+- Forward secrecy: Compromise of KEM keys does not reveal past session data, nor future sessions.
+- Post-compromise safety: New keys are derived for every data; compromise of one message key does not expose previous data.
+- Resistance to passive logging: SMP answers exchanged in encrypted form cannot be recovered later; an adversary must perform active MiTM and break them during the live exchange.
+- Metadata hiding: Nonces, key rotation counters, and similar protocol metadata are encrypted, preventing  adversaries from learning them.
+- Replay protection: Adversaries cannot replay old data, nor force old KEM reuses, even if valid signatures unless the hashing primitives have been broken.
+- Tamper protection: Adversaries cannot tamper with data, unless they break every crytographic primitive.
+
+#### 7.5. Conditional Security Guarantees
+
+- If both KEMs and the symmetric cipher are simultaneously broken, security falls back to the one-time pad batch (assuming OTP exchange was not intercepted).
+
+- If the OTP exchange is intercepted, confidentiality relies on the layered KEM + symmetric encryption.
+
+- If the initial SMP secret has sufficient entropy, active MITM during first contact is prevented. If it is weak, MITM may succeed to pull TOFU-style MITM attack during setup to spoof the per-contact signing key.
+
+### 8. Design Choices (Questions & Answers)
 **Question**:
 
 Why did you opt for `xChaCha20Poly1305` over `ChaCha20Poly1305` if you're encrypting the nonce ?
@@ -436,6 +534,7 @@ Why did you opt for `xChaCha20Poly1305` over `ChaCha20Poly1305` if you're encryp
 
 Even though we do encrypt the nonce, encrypting the nonce does not prevent nonce-reuse attacks, it only hides the fact they occured. 
 `xChaCha20Poly1305` nonces are a lot larger than `ChaCha20Poly1305` nonces, which means the probablity of a collision is tiny.
+The reason we hide the nonce, is not to hide nonce-reuse attacks primarily, as we already rotate the strand key everytime it is used. Hiding the nonce in the ratchet helps against metadata, and provides a built-in replay-protection for the xchacha wrapping, requiring no need to do i.e. hash chains.
 
 
 **Question**:
