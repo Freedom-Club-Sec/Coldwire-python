@@ -1,7 +1,7 @@
 # Strandlock Protocol Specification
 Version: **`1.0`**
 
-Date: **`2025-09-08`**
+Date: **`2025-09-25`**
 
 Author(s): **`ChadSec1`** (**`Freedom Club Sec`**)
 
@@ -15,13 +15,19 @@ Intended Audience: Security engineers, cryptographers, protocol implementers
 
 The *`Strandlock`* Protocol is a composite encryption protocol designed to intertwine multiple cryptographic primitives to achieve robust security. Its purpose is to ensure that the compromise of one, two, or even three different cryptographic primitives does not jeopardize the confidentiality or integrity of messages.
 
-Even if `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
+The protocol retains high-availability asynchronous behaviour, without reducing security and or privacy like similar protocols.
+
+
+If `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
 
 If `xChaCha20poly1305` is broken, messages remain safe as long as (at least) one `KEM` is uncompromised.
 
 If `OTP` implementation has mistakes, messages remain safe as long as `xChaCha20Poly1305` is remains unbroken.
 
 If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `OTP batch` request was not intercepted nor logged, messages remain safe.
+
+All cryptographic primitives are not just stacked on top of each other, but interwined. Each primitive both aids each other, and acts as a fallback if one or more are broken.
+
 
 *`Strandlock`* is transport-agnostic. It can operate over any underlying protocol, including federated chat systems like *`Coldwire`* or raw `TCP` sockets.
 
@@ -43,7 +49,7 @@ A logical state maintained between two parties that tracks shared secrets, nonce
 A cryptographically secure random value used for entropy injection, whitening, and rotation. Strand nonces are exclusively used for `xChaCha20Poly1305` wrapping encryption. Every request contains the next nonce that will be used for the next request. Such nonces we call "Strand Nonces". Alice and Bob both save each other strand nonces.
 
 #### Strand Key
-Any key material derived, rotated, or combined from multiple primitives within Strandlock. Strand Key is fed to `xChaCha20Poly1305` to "wrap encrypt" everything. Applies to PFS, MSGS requests and responses, but not SMP. SMP process uses a temporary key simply dubbed "Temporary xChaCha key" or "SMP key"
+Any key material derived, rotated, or combined from multiple primitives within Strandlock. Strand Key is fed to `xChaCha20Poly1305` to "wrap encrypt" everything. Applies to `SMP` (step 3 and onward), `PFS`, `MSGS` requests and responses.
 
 
 #### SMP (Socialist Millionaire Protocol)
@@ -58,16 +64,38 @@ A collection of one-time pad material derived from multiple primitives and signe
 #### Request Types: 
 Every request includes a message type identifier, which may be visible only in the very first `SMP` stage request. For all other requests that come afterwards, the type is encrypted within the payload.
 
-#### Nonces:
-Each request contains a `24-bytes nonce` immediately following the `type` field. These `nonces` are meant to be used for the next request to prevent metadata leakage, replay attacks, and on the small off-chance that a randomly generated nonce repeats twice, network adversaries wouldn't know a nonce reuse occured.
-
-Additionally, while all public security proofs of `xChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `xChaCha20Poly1305` against potentinal future attacks, leaving only open window through pure dumb brute-forcing of `32 bytes` key space.
 
 #### Encryption: 
-All payloads are encrypted with `XChaCha20Poly1305`, except for the `SMP` initiation stage.
+All payloads are encrypted with `XChaCha20Poly1305`, except for `SMP` step 1 (initiation).
+
+#### Forward ratchet and Nonces:
+All data is "wrap encrypted" using `xChaCha20Poly1305`
+
+Each request starts with a `32-bytes next_strand_key` and a `24-bytes nonce` before the `type` field.
+
+The key is saved on the receiver's end, to be that sender's next `strand_key`. Nonce is also saved as the sender's next `nonce`.
+
+This is a forward, stateful ratchet for the `xChaCha20Poyl1305`. By the rotating the key for every encryption operation, we reduce the "blast radius" in-case a key compormise occurs, then only all data afterwards could be encrypted, until a `PFS` is triggered and new `xChaCha20Poyl1305` strand key is derived from there.
+
+Hiding the `nonces` prevents metadata leakage, and in our scheme it also prevents replay attacks. 
+Additionally, while all public security proofs of `xChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `xChaCha20Poly1305` against potentinal future attacks, leaving only open window through pure dumb brute-forcing of the `32 bytes` key space.
+
+We deliberately avoided using a `KDF`, because this ratchet design is stronger. In `KDF` scheme, an attacker only need to brute-force 1 key to break all previous and future keys. Additionally, keys derived from a single master key suffer from being not true entropy.
+
+This ratchet is not the most optiomal ratchet in the world, but it should be fine, as the primary objective of ``xChaCha20Poly1305` encryption in our protocol, is to simply protect metadata. 
+
+Actual "ratchet" and "perfect-forward secrecy" and "post-compromise security" are an inherit part of One-time-pads, which is used to actually encrypt plaintext message contents. 
+
+**NOTE**: This ratchet applies to *all* data types, unless expliclity stated otherwise. Receiver, and sender **must** send and save new keys and nonce from / in every request.
+
 
 #### Human Verification: 
 `SMP` enforces a human-verifiable question-and-answer process before any chat communication. This prevents "trust on first use"-style attacks that plagues other encrypted protocols.
+
+#### General Acknowledgements:
+When you longpoll for new data, each data is appended with a `32 byte` id, once you process all the data, you should send back the acknowledged ids, so that they may be deleted off the server.
+
+This applies to all requests.
 
 ### 3. Socialist Millionaire Protocol (`SMP`)
 #### 3.1 Initialization (`Alice` -> `Bob`)
@@ -84,27 +112,35 @@ The `payload` is prefixed with `SMP_TYPE = 0x00`.
 
 #### 3.2 Initialization response (`Bob`)
 
-`Bob` generates a shared secret using `Alice’s` `ML-KEM-1024` public key (this is called temporary xchacha key, only used for `SMP` encryption).
+`Bob` generates a 4 shared secrets (`128 bytes` total) using `Alice’s` `ML-KEM-1024` public key, and concatenate the ciphertext together:
+- 1st key (`0:32` index) is `Bob's` `bob_strand_key`
+- 2nd key (`32:64` index) is `Alice's` `alice_strand_key`
+- 3rd key (`64:96` index) is `Bob's` `bob_backup_strand_key`
+- 4th key (`96:128` index) is `Alice's` `alice_backup_strand_key`.
 
-`Bob` generates two `Strand Nonces` (one for himself, one for `Alice`) and hashes each with `SHA3-512`, truncating output to `24 bytes`.
+`Bob` generates two `Strand Nonces` (one for himself, one for `Alice`).
 
-`Bob` also generates an `SMP nonce` for the verification process.
+Note: Every key, and nonce, *must* be generated from a cryptographically secure random generator. And all keys and nonces must be `SHA3_512` hashed, then the output must be truncated to the original key or nonce original sizes.
+
+`Bob` also generates an `SMP nonce` for the `SMP` verification process.
 
 `Bob` generates an `ML-DSA-87` key pair for signing (this is called `per-contact signing public key` or just `signing key`).
+
+Note: This key is a long-term key, and **must** be saved, and only used with the contact in question. 
 
 `Bob` prepares the `SMP response`:
 ```
 BOB_SIGNING_PUBLIC_KEY || BOB_NONCE || BOB_STRAND_NEXT_NONCE || ALICE_STRAND_NEXT_NONCE
 ```
 
-`Bob` encrypts the `response` using the derived `temporary XChaCha20 key`.
+`Bob` encrypts the `response` using `bob_strand_key` to produce `SMP_RESPONSE_CIPHERTEXTS`.
 
 `Bob` sends:
 ```
-SMP_TYPE || ALICE_ML_KEM_CIPHERTEXT || SMP_RESPONSE_CIPHERTEXT
+SMP_TYPE || ALICE_ML_KEM_CIPHERTEXTS || SMP_RESPONSE_CIPHERTEXTS
 ```
 
-`Bob` saves `Alice` to his contact list locally, however `Bob` **must** flag `Alice` as `unverified` or `pending_verification`.
+`Bob` saves `Alice` to his contact list locally, however `Bob` **must** flag `Alice` as `unverified` or `pending_verification` (i.e. do not process any non-SMP requests until the verification succeeds.).
 `Bob` also stores all `nonces` and the `temporary XChaCha key` for this `SMP` session.
 
 #### 3.3 Proof 1 (`Alice's` proof of `Bob's` public-key)
@@ -115,7 +151,7 @@ SMP_TYPE || ALICE_ML_KEM_CIPHERTEXT || SMP_RESPONSE_CIPHERTEXT
 
 `Alice` generates her `SMP nonce`.
 
-`Alice` normalizes her `SMP answer` (strip whitespace, lowercase only the first character) and `UTF-8` encodes it.
+`Alice` normalizes her `SMP answer` (strip leading and trailing whitespaces, and lowercase *only* the first character) and `UTF-8` encodes it.
 
 Alice generates an `Argon2Id salt` by concatenating `ALICE_SMP_NONCE` to `BOB_SMP_NONCE`, hashes it with `SHA3_512` and truncates back to `16 bytes` (16 bytes for interoperability with libsodium):
 ```
@@ -148,14 +184,14 @@ Alice generates an `ML-DSA-87` key pair for herself.
 
 `Alice` prepares `SMP` request (Question must be `UTF-8` encoded):
 ```
-SMP_REQUEST_DATA = SMP_TYPE || NEW_ALICE_STRAND_NONCE || ALICE_SIGNING_PUBLIC_KEY || ALICE_SMP_NONCE || ALICE_PROOF_OF_BOB || QUESTION_UTF-8
+SMP_REQUEST_DATA = SMP_TYPE || ALICE_SIGNING_PUBLIC_KEY || ALICE_SMP_NONCE || ALICE_PROOF_OF_BOB || QUESTION_UTF-8
 ```
 
-`Alice` encrypts the payload with `XChaCha20` using `temporary xchacha key` as key, and uses `ALICE_NEXT_STRAND_NONCE` as nonce, and sends it to `Bob`
+`Alice` encrypts the payload with the `XChaCha20Poly1305` wrapping scheme sends it to `Bob`.
 
 #### 3.4 Verification & Proof 2 (`Bob`):
 
-`Bob` decrypts the payload with the `temporary key` and asks the user for an `SMP answer`.
+`Bob` decrypts the `xChaCha20Poly1305` wrapper, and parses the payload and asks the user for an `SMP answer`.
 
 `Bob` checks if `BOB_SMP_NONCE` is equal to `ALICE_SMP_NONCE`, aborting and sending a `SMP failure request` if they match.
 
@@ -166,7 +202,7 @@ If verification *fails*:
 ```
 SMP_REQUEST_DATA = SMP_TYPE || b"failure".
 ```
-`Bob` encrypts the payload using `temporary chacha key`, but does not use his **Strand Nonce**, instead he generates a random nonce and bundles it at start of the **ciphertext**.
+`Bob` encrypts the payload with the `XChaCha20Poly1305` wrapping scheme sends it to `Alice
 
 If verification *succeeds*:
 
@@ -189,36 +225,37 @@ PROOF_DATA = ALICE_SMP_NONCE || BOB_SMP_NONCE || ALICE_FINGERPRINT
 SMP_REQUEST_DATA = SMP_TYPE || BOB_NEW_STRAND_NONCE || BOB_PROOF_OF_ALICE || BOB_STRAND_KEY || ALICE_STRAND_KEY
 ```
 
-`Bob` encrypts the `SMP request data` with `temporary xchacha key` as key, and previous `BOB_NEXT_STRAND_NONCE` as nonce, and sends to `Alice`.
+`Bob` encrypts the `SMP request data` with the `XChaCha20Poly1305` wrapping scheme sends it to `Alice`
 
-`Bob` modifies both `ALICE_STRAND_KEY` and `BOB_STRAND_KEY` by `XOR-ing` each key with the `SHA3-512` hash of `ANSWER_SECRET`:
+`Bob` modifies both the ratchet's new `ALICE_STRAND_KEY` and `BOB_STRAND_KEY` by `XOR-ing` each key with the `SHA3-512` hash of `ANSWER_SECRET` and truncating the hash output back to `32 bytes`:
 ```
-ALICE_STRAND_KEY = XOR(ALICE_STRAND_KEY, SHA3_512(ANSWER_SECRET))
-BOB_STRAND_KEY   = XOR(BOB_STRAND_KEY, SHA3_512(ANSWER_SECRET))
+ALICE_NEW_STRAND_KEY = XOR(SHA3_512(ANSWER_SECRET)[:32], ALICE_NEW_STRAND_KEY)
+BOB_NEW_STRAND_KEY   = XOR(SHA3_512(ANSWER_SECRET)[:32], BOB_NEW_STRAND_KEY)
 ```
 
+`Bob` then saves the new keys as always (in all throughout the protocol, we implicility imply you must save new ratchet keys, but in this specific stage, we add a special transformation before saving them). 
 
-`Bob` then saves the new keys, and marks `Alice` as `SMP` verified.
+`Bob` then marks `Alice` as `SMP` "verified".
 
 #### 3.5 Final Verification (`Alice`):
 
 `Alice` decrypts `Bob’s` `SMP` payload and verifies `Bob’s` proof.
 
-If valid, she applies the same `XOR` transformation to the `Strand Keys`, and saves them.
+If valid, she applies the same `XOR` transformation to the `Next Strand Keys`, and saves them.
 
 `Alice` marks `Bob` as verified.
 
-`Alice` sends her first PFS keys.
+`Alice` sends her first `PFS` keys.
 
 #### 3.6. Notes on SMP:
 
 Step 1: No encryption
 
-Step 2: Encryption is being set up
+Step 2: `xChaCha20Poly1305` ratchet encryption is being set up
 
-Step 3 and onwards: All requests are encrypted with the `temporary xchacha key` and `nonces` protected using the `strand nonces` by bundling next nonce to be used in every request.
+Step 3 and onwards: All requests are encrypted with `xChaCha20Poly1305` wrapping, by bundling next nonce and key to be used in every request. This applies not just to `SMP`, but to all other steps.
 
-Nonces are embedded in payloads, not sent in clear, except in step 2 and SMP failure requests
+Nonces are embedded in payloads, not sent in clear, except in step 2.
 
 Do not confuse `Strand Nonces` with `SMP Nonces`, the latter is only used for SMP process (as salt for `Argon2id`, etc, not for encryption), while the former is used in Step 3 and onwards, even in other requests types (`PFS`, `MSGS`, etc.)
 
@@ -231,7 +268,7 @@ We highly recommend implementations to only allow user to set a `8+ character` a
 
 Even though the `question` is encrypted, an active *Man-in-the-middle* adversary **can still retrieve it**. The verification would fail, but the adversary would have the `question` plaintext.
 
-This is acceptable, as the purpose of encrypting `SMP` process is to hide *metadata* against **passive** adversaries, not an **active** adversary. 
+This is acceptable, as the purpose of encrypting the `SMP` process is to hide *metadata* against **passive** adversaries, not an **active** adversary. 
 
 The question **must not** contain any senstive data. And it must not contain any hints to the answer.
 
@@ -258,12 +295,12 @@ hash_chain || ml_kem_1024_public_key || optional_classic_mceliece_8192128_public
 
 `Alice` generates `ALICE_NEW_STRAND_NONCE`.
 
-`Alice` constructs `PFS` request:
+`Alice` constructs `PFS` request (`PFS_NEW` = `\x01`):
 ```
-PFS_PAYLOAD = PFS_TYPE || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATURE || PUBLICKEYS_HASHCHAIN
+PFS_PAYLOAD = PFS_NEW || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATURE || PUBLICKEYS_HASHCHAIN
 ```
 
-`Alice` then encrypts the `PFS_PAYLOAD`, with `xChaCha20Poly1305` using her `ALICE_STRAND_KEY` key, and using previous `ALICE_NEXT_STRAND_NONCE` as nonce. 
+`Alice` does not use the new keys, but saves them until she receives an `PFS ack` request, which she then deletes old keys, and uses the new keys. 
 
 #### 4.2 Receiving PFS Keys (`Bob`)
 
@@ -275,6 +312,11 @@ PFS_PAYLOAD = PFS_TYPE || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATU
 
 `Bob` determines which keys were sent (`ML-KEM-1024` only or `ML-KEM-1024` + `Classic-McEliece-8192128`), and saves them.
 
+Afterwards, `Bob` then sends an `PFS ack` (`PFS_ACK` = `\x02`) request to `Alice`, informing her that he received keys:
+```
+PFS_ACK_PAYLOAD = PFS_ACK
+```
+
 `Bob` then checks if he already sent keys to `Alice`, if he never sent any keys before to `Alice`, he performs the `4.1. Key Rotation` as well.
 
 #### 4.3. PFS Notes:
@@ -282,6 +324,9 @@ Even though the use of hash-chains and signatures may appear redundant here, as 
 
 The reason we opted for a hash-chain based design, instead of a simple counter, is to ensure metadata of how many key rotations occured never gets leaked, even when `xChaCha20Poly1305` is broken. 
 Even if `Alice's` or `Bob's` endpoint get compromised, no metadata of how many key rotation occured could be recovered.
+
+Acknowlegement make this design fully async, and arguably more secure than other async `PFS` schemes, as only one set of keypairs are at use at any time.
+
 
 ### 5. Messaging (`MSGS`)
 #### 5.1 OTP Batch Generation (`Alice`)
