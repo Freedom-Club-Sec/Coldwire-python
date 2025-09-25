@@ -15,7 +15,7 @@ Intended Audience: Security engineers, cryptographers, protocol implementers
 
 The *`Strandlock`* Protocol is a composite encryption protocol designed to intertwine multiple cryptographic primitives to achieve robust security. Its purpose is to ensure that the compromise of one, two, or even three different cryptographic primitives does not jeopardize the confidentiality or integrity of messages.
 
-The protocol retains high-availability asynchronous behaviour, without reducing security and or privacy like similar protocols.
+The protocol retains high-availability asynchronous behaviour, but it does require stateful managing, and it achieves so without reducing security and or privacy like similar protocols.
 
 If `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
 
@@ -524,6 +524,20 @@ Under the stated model and assuming correct implementation:
 - If the OTP exchange is intercepted, confidentiality relies on the layered KEM + symmetric encryption.
 
 - If the initial SMP secret has sufficient entropy, active MITM during first contact is prevented. If it is weak, MITM may succeed to pull TOFU-style MITM attack during setup to spoof the per-contact signing key.
+
+#### 7.6. Conditional OTP Guarantee.
+If, and only if, the following conditions hold for a given OTP batch:
+
+- The OTP batch was generated from at least one source of entropy that is unpredictable to the adversary at the time of generation (i.e., high-quality TRNG or equivalent with documented entropy)
+
+- The OTP batch was delivered to the recipient without being intercepted by the adversary (adversary had no on-path access during the OTP batch delivery)
+- The implementation enforces the pad lifecycle rules in this specification (immediate truncation, secure zeroization, atomic state updates, and crash-consistent journaling),
+then all messages encrypted with that OTP batch enjoy information-theoretic confidentiality (Shannon secrecy) for the lifetime of the consumed pads.
+
+Fallback Guarantee.
+- If any of the above conditions do not hold (e.g., the OTP batch was intercepted, the entropy source was compromised, or pad lifecycle rules were violated), confidentiality for affected messages degrades to the computational security provided by the layered primitives: xChaCha20-Poly1305 AEAD combined with the hybrid KEMs (ML-KEM-1024 and Classic-McEliece-8192128). In this degraded case, the security assumptions are the standard computational hardness assumptions for the listed primitives.
+
+- Implementers must not claim absolute, unconditional OTP security; instead they must present the conditional guarantee above and provide evidence that the OTP-batch conditions were satisfied.
 
 ### 8. Design Choices (Questions & Answers)
 **Question**:
