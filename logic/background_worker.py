@@ -1,5 +1,8 @@
 from core.requests import http_request
-from logic.smp import smp_data_handler
+from logic.smp import (
+        smp_data_handler,
+        smp_unanswered_questions
+)
 from logic.pfs import pfs_data_handler
 from logic.message import messages_data_handler
 from logic.user import validate_identifier
@@ -67,6 +70,9 @@ def parse_blobs(blobs: list[bytes]) -> dict:
     return parsed_messages
 
 def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
+    # Incase we received a SMP question request last time and user did not answer it.
+    smp_unanswered_questions(user_data, user_data_lock, ui_queue)
+
 
     # Acknowledgements
     acks = {}

@@ -166,9 +166,6 @@ def smp_step_2(user_data: dict, user_data_lock, contact_id: str, blob: bytes, ui
         user_data["contacts"][contact_id]["our_next_strand_key"]     = our_next_strand_key
         user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
 
-        user_data["contacts"][contact_id]["our_next_strand_key"]     = our_next_strand_key
-        user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
-
 
         user_data["contacts"][contact_id]["our_next_strand_nonce"]     = our_next_strand_nonce
         user_data["contacts"][contact_id]["contact_next_strand_nonce"] = contact_next_strand_nonce
@@ -504,6 +501,7 @@ def smp_failure(user_data, user_data_lock, contact_id, ui_queue) -> None:
 
     ui_queue.put({"type": "showerror", "title": "Error", "message": "Verification has failed! Please re-try."})
 
+    save_account_data(user_data, user_data_lock)
 
 def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) -> None:
     with user_data_lock:
@@ -512,12 +510,20 @@ def smp_failure_notify_contact(user_data, user_data_lock, contact_id, ui_queue) 
         session_headers = user_data["tmp"]["session_headers"]
 
         our_next_strand_key = user_data["contacts"][contact_id]["our_next_strand_key"]
-        our_next_strand_nonce = user_data["contacts"][contact_id]["contact_next_strand_nonce"]
+        our_next_strand_nonce = user_data["contacts"][contact_id]["our_next_strand_nonce"]
 
+    
 
     # we don t need to save them.
     new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
     new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
+    
+
+    # This is so the request happens. Receiver triggers SMP failure anyway if contact is pending verification and we couldn't decrypt data.
+    if not our_next_strand_key or not our_next_strand_nonce:
+        our_next_strand_key   = new_strand_key
+        our_next_strand_nonce = new_strand_nonce
+
     _, ciphertext_blob = encrypt_xchacha20poly1305(
             our_next_strand_key, 
             new_strand_key + new_strand_nonce + SMP_TYPES["SMP_INIT"] + b"failure", 
