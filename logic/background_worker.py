@@ -18,7 +18,7 @@ from core.crypto import (
 from core.trad_crypto import (
         decrypt_xchacha20poly1305
 )
-from base64 import urlsafe_b64encode
+from base64 import b64decode, urlsafe_b64encode
 import copy
 import logging
 
@@ -67,17 +67,43 @@ def parse_blobs(blobs: list[bytes]) -> dict:
     return parsed_messages
 
 def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
-    # Incase we received a SMP question request last time and user did not answer it.
-    # NOTE: this is not needed anymore, as we have implemented acknowlegements
-    # smp_unanswered_questions(user_data, user_data_lock, ui_queue)
 
     # Acknowledgements
     acks = {}
 
     while not stop_flag.is_set():
+
         with user_data_lock:
             server_url = user_data["server_url"]
             auth_token = user_data["token"]
+            session_headers  = user_data["tmp"]["session_headers"]
+
+            user_data_copied = copy.deepcopy(user_data)
+
+
+        for i, v in user_data_copied["contacts"].items():
+            for msg_payload in v["staged_messages"]:
+                try:
+                    http_request(f"{server_url}/data/send", "POST", metadata = {
+                            "recipient": i
+                        }, 
+                        blob = b64decode(msg_payload),
+                        headers = session_headers, 
+                        auth_token = auth_token
+                    )
+                    logger.info("Successfuly recovered and sent the message to contact (%s)", i)
+
+                    with user_data_lock:
+                        user_data["contacts"][i]["staged_messages"].pop(0)
+                        
+                        if not user_data["contacts"][i]["staged_messages"]:
+                            user_data["contacts"][i]["locked"] = False
+
+                except Exception as e:
+                    logger.error("Failed to send recovered message to contact (%s), error: %s", i, str(e))
+                    break
+
+
     
         try:
             # Random longpoll number to help obfsucate traffic against analysis
@@ -109,19 +135,27 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
             sender = message["sender"]
             blob   = message["blob"]
 
+            with user_data_lock:
+                try:
+
+                    if user_data["contacts"][sender]["locked"] is False:
+                        user_data["contacts"][sender]["locked"] = True
+                    else:
+                        logger.info("Skipping data message from contact (%s) as contact is locked.", contact_id)
+                        continue
+
+                except Exception:
+                    pass
+
+                user_data_copied = copy.deepcopy(user_data)
+
+
+
             ack_id = urlsafe_b64encode(message["ack_id"]).decode().rstrip("=")
             if "acks" not in acks:
                 acks["acks"] = [ack_id]
             else:
                 acks["acks"].append(ack_id)
-
-            with user_data_lock:
-                try:
-                    user_data["contacts"][sender]["locked"] = True
-                except Exception:
-                    pass
-
-                user_data_copied = copy.deepcopy(user_data)
 
             # Everything from here is not validated by server
 

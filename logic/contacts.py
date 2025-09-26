@@ -97,6 +97,7 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
 
                     }
                 },
+                "staged_messages": [],
                 "our_next_strand_key": None,
                 "contact_next_strand_key": None,
                 "our_next_strand_nonce": None,

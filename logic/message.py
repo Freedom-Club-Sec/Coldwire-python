@@ -40,6 +40,7 @@ from core.constants import (
     XCHACHA20POLY1305_NONCE_LEN
 
 )
+from base64 import b64encode
 import secrets
 import logging
 
@@ -145,6 +146,8 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
        
         if user_data["contacts"][contact_id]["locked"]:
             return
+        else:
+            user_data["contacts"][contact_id]["locked"] = True
 
 
     if contact_kyber_public_key is None or contact_mceliece_public_key is None:
@@ -216,20 +219,24 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         )
    
     try:
-        http_request(f"{server_url}/data/send", "POST", metadata = {
+        http_request(f"{server_url}/data/sendd", "POST", metadata = {
                 "recipient": contact_id
             }, 
             blob = ciphertext_blob, 
             headers = session_headers, 
             auth_token = auth_token
         )
-    except Exception:
-        ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our message to the server"})
-        return False
+        logger.info("Successfuly sent the message to contact (%s)", contact_id)
+        with user_data_lock:
+            user_data["contacts"][contact_id]["locked"] = False
+    except Exception as e:
+        logger.error("Could not send new message to contact (%s), server gave us error: %s", contact_id, str(e))
+        ui_queue.put({"type": "showerror", "title": "Error", "message": "Failed to send our message to the server. You do NOT need to resent it, we will resent it automatically once you regain internet connectivity."})
 
-
-    logger.info("Successfuly sent the message to contact (%s)", contact_id)
+        with user_data_lock:
+            user_data["contacts"][contact_id]["staged_messages"].append(b64encode(ciphertext_blob).decode())
     
+        save_account_data(user_data, user_data_lock)
 
     return True
 
