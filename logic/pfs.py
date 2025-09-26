@@ -1,6 +1,4 @@
 """
-    logic/pfs.py
-    -----------------
     Handles Perfect Forward Secrecy (PFS) ephemeral keys exchange and rotation for contacts.
 
     Handles:

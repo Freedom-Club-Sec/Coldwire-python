@@ -1,6 +1,4 @@
 """
-    logic/smp.py
-    ----------
     The socialist millionaire problem
     A variant of Yao's millionaire problem
 

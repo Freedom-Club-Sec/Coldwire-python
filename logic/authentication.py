@@ -1,6 +1,4 @@
 """
-    logic/authentication.py
-    ----------
     Implements client-side account authentication with the Coldwire server.
     Uses ML-DSA-87 signatures to sign a challenge to verify account ownership.
 

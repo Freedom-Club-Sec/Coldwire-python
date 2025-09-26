@@ -1,6 +1,4 @@
 """
-    logic/message.py
-    -----------
     Message sending, receiving, and one-time-pad key exchange logic.
 
     Handles:
