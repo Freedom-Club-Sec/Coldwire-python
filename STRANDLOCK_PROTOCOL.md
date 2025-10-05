@@ -426,9 +426,9 @@ If `OTP batch` request is intercepted, `OTP` messages inherits the combined secu
 
 Additionally, using `OTPs` here provides an odd protection to `xChaCha20Poly1305`, by making "`known plaintext oracles`" attacks impossible, significantly bolstering `xChaCha20Poly1305` security.
 
-Additionally, using `OTPs` makes nonce reuses non-fatal, as we already encrypt nonces, the only possible way for an adversary on wire to know a nonce reuse occured, is if user types same message, with same key, with same nonce.
+Additionally, using `OTPs` makes nonce reuses non-fatal, as we already encrypt nonces and change the key every time in a ratchet, the only possible way for an adversary on wire to know a nonce reuse occured, is if user types same message, with same key, with same nonce.
 
-Even if a ranodmly generated nonce was repeated, and the user does such unlikely thing, the fact plaintext is OTP encrypted, means the adversary would still see different ciphertexts. Making it impossible for them to know if a nonce reuse occured.
+Even if a ranodmly generated nonce was repeated, and the user does such unlikely thing, and implementation has mistakes of reusing same key + nonce, the fact plaintext is OTP encrypted, means the adversary would still see different ciphertexts. Making it impossible for them to know if a nonce reuse occured.
 Obviously, this does not mean a nonce reuse wouldn't occur, it just means an adversary wouldn't be able to exploit the fact because to him, is invisible random blobs.
 
 However, implementations **MUST** still use cryptographically secure `CSPRNG` for nonce generation nonetheless. This protection property only protects against the off chance a `CSPRNG` generated nonce gets duplicated.
@@ -445,7 +445,7 @@ This section defines what Strandlock defends and what it explicitly does not. Re
 - May attempt to decrypt recorded messages later if primitives are broken.
 
 ##### Active network adversary:
--Can intercept, modify, inject, replay, and delay messages in real time.
+- Can intercept, modify, inject, replay, and delay messages in real time.
 - Can attempt man-in-the-middle (MITM) during initial `SMP` initiation.
 
 ##### Cryptanalytic attacker:
