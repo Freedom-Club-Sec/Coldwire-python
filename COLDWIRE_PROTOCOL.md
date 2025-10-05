@@ -50,6 +50,9 @@ Refers to a user-client implementation of the `Coldwire protocol`.
 #### Server implementation
 Refers to a server implementation of the `Coldwire protocol`.
 
+#### General Acknowledgements:
+When new data for a user is insert, implementations must append a random id (`32 bytes`), and when user longpolls for data, implementations must check to see if there exists ack paramaters ids, and remove all data starting with the supplied ids.
+
 
 ### 2. HTTP Requests
 #### 2.1. Client Headers
