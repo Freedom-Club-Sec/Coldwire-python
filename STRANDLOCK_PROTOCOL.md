@@ -582,7 +582,7 @@ Using raw entropy does not guarantee it is uniform. As `CSPRNG` entropy is usual
 The reason we use SHA3_512 specifically, and truncate to size we need, is actually 3 separate reasons:
 - Less code is called: Depending on one hashing algorithm, means we have to call less code with potentinally untrusted input. 
 - `SHA3_512` internal state can store more entropy than for instance `SHA3_256`.
-- `SHA3` in general, is proven to be better resistant to `Shor's` algorithm, which makes it better long-term than (for instance) `SHA2`.
+- `SHA3` in general, is proven to be better resistant to `Groover's` algorithm, which makes it better long-term than (for instance) `SHA2`.
 - 
 
 **Question**
