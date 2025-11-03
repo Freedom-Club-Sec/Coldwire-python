@@ -28,7 +28,7 @@ If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `O
 All cryptographic primitives are not just stacked on top of each other, but interwined. Each primitive both aids each other, and acts as a fallback if one or more are broken.
 
 Strandlock protects confidentiality and anti-MITM in the active and passive-recording model (no endpoint compromise) by combining independent KEMs, per-message key rotation, and an OTP batch fallback. 
-See the full Threat Model section (7. Threat Model) for exact attacker capabilities and limits.
+See the full Threat Model  (section 7. Threat Model) for exact attacker capabilities and limits.
 
 
 *`Strandlock`* is transport-agnostic. It can operate over any underlying protocol, including federated chat systems like *`Coldwire`* or raw `TCP` sockets.
