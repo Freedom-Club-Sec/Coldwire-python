@@ -11,7 +11,7 @@
         "sec-fetch-user": "?1",
         "sec-fetch-dest": "document",
         "accept-encoding": "ColdWireColdWireColdWir",
-        "accept-language": "en-GB,en;q=0.9,en-US;q=0.8"
+        "accept-language": "en-US;q=0.8"
     }
     
 }
