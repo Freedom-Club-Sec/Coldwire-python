@@ -40,7 +40,7 @@ cd liboqs-python
 pip install .
 ```
 
-Clone Coldwire repositioary and install `requirements.txt` by running:
+Clone Coldwire repository and install `requirements.txt` by running:
 ```
 git clone https://github.com/Freedom-Club-Sec/Coldwire
 cd Coldwire
