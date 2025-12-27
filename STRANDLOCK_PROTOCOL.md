@@ -17,13 +17,13 @@ The *`Strandlock`* Protocol is a composite encryption protocol designed to inter
 
 The protocol retains high-availability asynchronous behaviour, but it does require stateful managing, and it achieves so without reducing security and or privacy like similar protocols.
 
-If `ML-KEM-1024` and `Classic McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
+If `ML-KEM-1024` and `Classic-McEliece-8192128` are broken, messages remain secure, provided that the initial `SMP` verification request is not intercepted. If the initial SMP request is intercepted, security is maintained as long as the SMP answer retains sufficient entropy.
 
-If `xChaCha20poly1305` is broken, messages remain safe as long as (at least) one `KEM` is uncompromised.
+If `XChaCha20poly1305` is broken, messages remain safe as long as (at least) one `KEM` is uncompromised.
 
-If `OTP` implementation has mistakes, messages remain safe as long as `xChaCha20Poly1305` is remains unbroken.
+If `OTP` implementation has mistakes, messages remain safe as long as `XChaCha20Poly1305` is remains unbroken.
 
-If Both `KEMs`, and `xChaCha20Poly1305` are compromised in future, as long as `OTP batch` request was not intercepted nor logged, messages remain safe.
+If Both `KEMs`, and `XChaCha20Poly1305` are compromised in future, as long as `OTP batch` request was not intercepted nor logged, messages remain safe.
 
 All cryptographic primitives are not just stacked on top of each other, but interwined. Each primitive both aids each other, and acts as a fallback if one or more are broken.
 
@@ -48,10 +48,10 @@ We use term "Response" and "Request" interchangably. A response is a request.
 A logical state maintained between two parties that tracks shared secrets, nonces, and protocol progress. A session may span multiple Requests and Responses. Only one session is allowed per-contact. This protocol does not (and will not) support multi-devices, nor multi-session per same contact.
 
 #### Strand Nonce
-A cryptographically secure random value used for entropy injection, whitening, and rotation. Strand nonces are exclusively used for `xChaCha20Poly1305` wrapping encryption. Every request contains the next nonce that will be used for the next request. Such nonces we call "Strand Nonces". Alice and Bob both save each other strand nonces.
+A cryptographically secure random value used for entropy injection, whitening, and rotation. Strand nonces are exclusively used for `XChaCha20Poly1305` wrapping encryption. Every request contains the next nonce that will be used for the next request. Such nonces we call "Strand Nonces". Alice and Bob both save each other strand nonces.
 
 #### Strand Key
-Any key material derived, rotated, or combined from multiple primitives within Strandlock. Strand Key is fed to `xChaCha20Poly1305` to "wrap encrypt" everything. Applies to `SMP` (step 3 and onward), `PFS`, `MSGS` requests and responses.
+Any key material derived, rotated, or combined from multiple primitives within Strandlock. Strand Key is fed to `XChaCha20Poly1305` to "wrap encrypt" everything. Applies to `SMP` (step 3 and onward), `PFS`, `MSGS` requests and responses.
 
 
 #### SMP (Socialist Millionaire Protocol)
@@ -71,20 +71,20 @@ Every request includes a message type identifier, which may be visible only in t
 All payloads are encrypted with `XChaCha20Poly1305`, except for `SMP` step 1 (initiation).
 
 #### Forward ratchet and Nonces:
-All data is "wrap encrypted" using `xChaCha20Poly1305`
+All data is "wrap encrypted" using `XChaCha20Poly1305`
 
 Each request starts with a `32-bytes next_strand_key` and a `24-bytes nonce` before the `type` field.
 
 The key is saved on the receiver's end, to be that sender's next `strand_key`. Nonce is also saved as the sender's next `nonce`.
 
-This is a forward, stateful ratchet for the `xChaCha20Poyl1305`. By the rotating the key for every encryption operation, we reduce the "blast radius" in-case a key compormise occurs, then only all data afterwards could be encrypted, until a `PFS` is triggered and new `xChaCha20Poyl1305` strand key is derived from there.
+This is a forward, stateful ratchet for the `XChaCha20Poyl1305`. By the rotating the key for every encryption operation, we reduce the "blast radius" in-case a key compormise occurs, then only all data afterwards could be encrypted, until a `PFS` is triggered and new `XChaCha20Poyl1305` strand key is derived from there.
 
 Hiding the `nonces` prevents metadata leakage, and in our scheme it also prevents replay attacks. 
-Additionally, while all public security proofs of `xChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `xChaCha20Poly1305` against potentinal future attacks, leaving only open window through pure dumb brute-forcing of the `32 bytes` key space.
+Additionally, while all public security proofs of `XChaCha20Poly1305` assume nonce is public, encrypting and or hiding the `nonce` might actually "future-proof" `XChaCha20Poly1305` against potential future attacks, leaving only open window through pure dumb brute-forcing of the `32 bytes` key space.
 
 We deliberately avoided using a `KDF`, because this ratchet design is stronger. In `KDF` scheme, an attacker only need to brute-force 1 key to break all previous and future keys. Additionally, keys derived from a single master key suffer from being not true entropy.
 
-This ratchet is not the most optiomal ratchet in the world, but it should be fine, as the primary objective of ``xChaCha20Poly1305` encryption in our protocol, is to simply protect metadata. 
+This ratchet is not the most optiomal ratchet in the world, but it should be fine, as the primary objective of `XChaCha20Poly1305` encryption in our protocol, is to simply protect metadata. 
 
 Actual "ratchet" and "perfect-forward secrecy" and "post-compromise security" are an inherit part of One-time-pads, which is used to actually encrypt plaintext message contents. 
 
@@ -199,7 +199,7 @@ SMP_REQUEST_DATA = SMP_TYPE || ALICE_SIGNING_PUBLIC_KEY || ALICE_SMP_NONCE || AL
 
 #### 3.4 Verification & Proof 2 (`Bob`):
 
-`Bob` decrypts the `xChaCha20Poly1305` wrapper, and parses the payload and asks the user for an `SMP answer`.
+`Bob` decrypts the `XChaCha20Poly1305` wrapper, and parses the payload and asks the user for an `SMP answer`.
 
 `Bob` checks if `BOB_SMP_NONCE` is equal to `ALICE_SMP_NONCE`, aborting and sending a `SMP failure request` if they match.
 
@@ -210,7 +210,7 @@ If verification *fails*:
 ```
 SMP_REQUEST_DATA = SMP_TYPE || b"failure".
 ```
-`Bob` encrypts the payload with the `XChaCha20Poly1305` wrapping scheme sends it to `Alice
+`Bob` encrypts the payload with the `XChaCha20Poly1305` wrapping scheme sends it to `Alice`
 
 If verification *succeeds*:
 
@@ -259,9 +259,9 @@ If valid, she applies the same `XOR` transformation to the `Next Strand Keys`, a
 
 Step 1: No encryption
 
-Step 2: `xChaCha20Poly1305` ratchet encryption is being set up
+Step 2: `XChaCha20Poly1305` ratchet encryption is being set up
 
-Step 3 and onwards: All requests are encrypted with `xChaCha20Poly1305` wrapping, by bundling next nonce and key to be used in every request. This applies not just to `SMP`, but to all other steps.
+Step 3 and onwards: All requests are encrypted with `XChaCha20Poly1305` wrapping, by bundling next nonce and key to be used in every request. This applies not just to `SMP`, but to all other steps.
 
 Nonces are embedded in payloads, not sent in clear, except in step 2.
 
@@ -312,7 +312,7 @@ PFS_PAYLOAD = PFS_NEW || ALICE_NEW_STRAND_NONCE || PUBLICKEYS_HASHCHAIN_SIGNATUR
 
 #### 4.2 Receiving PFS Keys (`Bob`)
 
-`Bob` decrypts strand wrapper encryption with `xChaCha20Poly1305` using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
+`Bob` decrypts strand wrapper encryption with `XChaCha20Poly1305` using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
 
 `Bob` updates `ALICE_NEXT_STRAND_NONCE` with `ALICE_NEW_STRAND_NONCE`.
 
@@ -328,9 +328,9 @@ PFS_ACK_PAYLOAD = PFS_ACK
 `Bob` then checks if he already sent keys to `Alice`, if he never sent any keys before to `Alice`, he performs the `4.1. Key Rotation` as well.
 
 #### 4.3. PFS Notes:
-Even though the use of hash-chains and signatures may appear redundant here, as we already wrap everything in `xChaCha20Poly1305`, and we encrypt its nonce, which serves as a replay protection, and tamper protection, the use of hash-chains here ensures that even if `xChaCha20Poly1305` is broken, PFS keys cannot be replayed, nor tampered with.
+Even though the use of hash-chains and signatures may appear redundant here, as we already wrap everything in `XChaCha20Poly1305`, and we encrypt its nonce, which serves as a replay protection, and tamper protection, the use of hash-chains here ensures that even if `XChaCha20Poly1305` is broken, PFS keys cannot be replayed, nor tampered with.
 
-The reason we opted for a hash-chain based design, instead of a simple counter, is to ensure metadata of how many key rotations occured never gets leaked, even when `xChaCha20Poly1305` is broken. 
+The reason we opted for a hash-chain based design, instead of a simple counter, is to ensure metadata of how many key rotations occured never gets leaked, even when `XChaCha20Poly1305` is broken. 
 Even if `Alice's` or `Bob's` endpoint get compromised, no metadata of how many key rotation occured could be recovered.
 
 Acknowlegement make this design fully async, and arguably more secure than other async `PFS` schemes, as only one set of keypairs are at use at any time.
@@ -362,7 +362,7 @@ She saves her new `ALICE_STRAND_KEY`, and `ALICE_OTP_PADS`.
 These `ALICE_OTP_PADS` will be used to encrypt messages sent from `Alice` to `Bob`.
 
 #### 5.2 New OTP Batch Processing (`Bob`)
-`Bob` decrypts the `xChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
+`Bob` decrypts the `XChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
 `Bob` checks if request type is `MSG_TYPE`, then `Bob` checks the next byte if it's `0x00` (`New OTP Batch`), or `0x01` (New `OTP Message`)
 
 If its a `New OTP Batch`, `Bob`  verifies `OTP_BATCH_SIGNATURE` against `ML_KEM_1024_CIPHERTEXT` + `CLASSIC_MCELIESE_819_CIPHERTEXT`
@@ -401,11 +401,11 @@ MSG_DATA = MSG_TYPE || 0x01 || ALICE_NEW_STRAND_NONCE || MESSAGE_ENCRYPTED
 
 `0x01` indicates this is a MSG of type `New OTP Message`.
 
-`Alice` then encrypts `MSG_DATA` with `xChaCha20Poly1305` using `ALICE_STRAND_KEY`, and `ALICE_NEXT_STRAND_NONCE` as nonce, then sends it to `Bob`.
+`Alice` then encrypts `MSG_DATA` with `XChaCha20Poly1305` using `ALICE_STRAND_KEY`, and `ALICE_NEXT_STRAND_NONCE` as nonce, then sends it to `Bob`.
 
 #### 5.3 Receiving Messages (Bob)
 
-`Bob` decrypts the `xChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
+`Bob` decrypts the `XChaCha20Poly1305` wrapping, using `ALICE_STRAND_KEY` as key, and `ALICE_NEXT_STRAND_NONCE` as nonce.
 `Bob` checks if request type is `MSG_TYPE`, then `Bob` checks the next byte if it's `0x00` (`New OTP Batch`), or `0x01` (New `OTP Message`)
 
 if is `New OTP Message`, `Bob` decrypt the encrypted message with `ALICE_OTP_PADS`.
@@ -414,17 +414,17 @@ if is `New OTP Message`, `Bob` decrypt the encrypted message with `ALICE_OTP_PAD
 `Bob` then `UTF-8` decodes the message, and displays it.
 
 #### 5.4. MSGs Notes
-The reason we don't use a hash-chain like in `PFS`, is because the `xChaCha20Poly1305` wrapping `strand` scheme provides tampering and replay protection. And even if `xChaCha20Poly1305` is broken, messages that get tampered or replayed with, `Bob` would notice as the message content would be inparsable junk (at UTF-8 decoding step).
+The reason we don't use a hash-chain like in `PFS`, is because the `XChaCha20Poly1305` wrapping `strand` scheme provides tampering and replay protection. And even if `XChaCha20Poly1305` is broken, messages that get tampered or replayed with, `Bob` would notice as the message content would be inparsable junk (at UTF-8 decoding step).
 
-Encrypting with `OTP` ensures that even if `xChaCha20Poly1305` is broken, and even if one `KEM` is broken, messages remain uncompromised.
+Encrypting with `OTP` ensures that even if `XChaCha20Poly1305` is broken, and even if one `KEM` is broken, messages remain uncompromised.
 
-Even if `xChaCha20Poly1305` is broken, and 2 KEMs broken, messages remain uncompromised if the `OTP batch` request was not intercepted.
+Even if `XChaCha20Poly1305` is broken, and 2 KEMs broken, messages remain uncompromised if the `OTP batch` request was not intercepted.
 
 If `OTP batch` request was not intercepted, messages become true OTPs.
 
-If `OTP batch` request is intercepted, `OTP` messages inherits the combined security of `xChaCha20Poly1305`, `ML-KEM-1024`, `Classic-McEliece-8192128`, and even the entropy of `SMP answer`.
+If `OTP batch` request is intercepted, `OTP` messages inherits the combined security of `XChaCha20Poly1305`, `ML-KEM-1024`, `Classic-McEliece-8192128`, and even the entropy of `SMP answer`.
 
-Additionally, using `OTPs` here provides an odd protection to `xChaCha20Poly1305`, by making "`known plaintext oracles`" attacks impossible, significantly bolstering `xChaCha20Poly1305` security.
+Additionally, using `OTPs` here provides an odd protection to `XChaCha20Poly1305`, by making "`known plaintext oracles`" attacks impossible, significantly bolstering `XChaCha20Poly1305` security.
 
 Additionally, using `OTPs` makes nonce reuses non-fatal, as we already encrypt nonces and change the key every time in a ratchet, the only possible way for an adversary on wire to know a nonce reuse occured, is if user types same message, with same key, with same nonce.
 
@@ -535,45 +535,45 @@ If, and only if, the following conditions hold for a given OTP batch:
 then all messages encrypted with that OTP batch enjoy information-theoretic confidentiality (Shannon secrecy) for the lifetime of the consumed pads.
 
 Fallback Guarantee.
-- If any of the above conditions do not hold (e.g., the OTP batch was intercepted, the entropy source was compromised, or pad lifecycle rules were violated), confidentiality for affected messages degrades to the computational security provided by the layered primitives: xChaCha20-Poly1305 AEAD combined with the hybrid KEMs (ML-KEM-1024 and Classic-McEliece-8192128). In this degraded case, the security assumptions are the standard computational hardness assumptions for the listed primitives.
+- If any of the above conditions do not hold (e.g., the OTP batch was intercepted, the entropy source was compromised, or pad lifecycle rules were violated), confidentiality for affected messages degrades to the computational security provided by the layered primitives: XChaCha20-Poly1305 AEAD combined with the hybrid KEMs (ML-KEM-1024 and Classic-McEliece-8192128). In this degraded case, the security assumptions are the standard computational hardness assumptions for the listed primitives.
 
 - Implementers must not claim absolute, unconditional OTP security; instead they must present the conditional guarantee above and provide evidence that the OTP-batch conditions were satisfied.
 
 ### 8. Design Choices (Questions & Answers)
 **Question**:
 
-Why did you opt for `xChaCha20Poly1305` over `ChaCha20Poly1305` if you're encrypting the nonce ?
+Why did you opt for `XChaCha20Poly1305` over `ChaCha20Poly1305` if you're encrypting the nonce?
 
 **Answer**: 
 
 Even though we do encrypt the nonce, encrypting the nonce does not prevent nonce-reuse attacks, it only hides the fact they occured. 
-`xChaCha20Poly1305` nonces are a lot larger than `ChaCha20Poly1305` nonces, which means the probablity of a collision is tiny.
+`XChaCha20Poly1305` nonces are a lot larger than `ChaCha20Poly1305` nonces, which means the probablity of a collision is tiny.
 The reason we hide the nonce, is not to hide nonce-reuse attacks primarily, as we already rotate the strand key everytime it is used. Hiding the nonce in the ratchet helps against metadata, and provides a built-in replay-protection for the xchacha wrapping, requiring no need to do i.e. hash chains.
 
 
 **Question**:
 
-Why did you opt for `xChaCha20Poly1305` over `AES-GCM-SIV` ?
+Why did you opt for `XChaCha20Poly1305` over `AES-GCM-SIV`?
 
 **Answer**: 
 
-We chose `xChaCha20Poly1305` over `AES-GCM-SIV` (or just `AES` as an algorithm in general) because the former is easier to implement in software, less vulnerable to side-channels, and does not depend on any black-box hardware "accelerators".
+We chose `XChaCha20Poly1305` over `AES-GCM-SIV` (or just `AES` as an algorithm in general) because the former is easier to implement in software, less vulnerable to side-channels, and does not depend on any black-box hardware "accelerators".
 
 
 **Question**
 
-Why did you opt for `OTP` encryption, if you're already using `xChaCha20Poly1305`, why not just use `xChaCha` alone ?
+Why did you opt for `OTP` encryption, if you're already using `XChaCha20Poly1305`, why not just use `XChaCha` alone?
 
 **Answer**
 
-OTP encryption provides unique properties, and when combined with a classical symmetric algorithm, both algorithms benefit each other. On one hand, `xChaCha20Poly1305` encryption of `OTP`-encrypted messages, provides protection against `OTP` implementation errors, on the other hand, using `OTP`-encrypted messages as plaintext to `xChaCha20Poly1305` destroys one of cryptographors favorite oracles `known plaintext oracle`, which removes a whole class of attacks.
+OTP encryption provides unique properties, and when combined with a classical symmetric algorithm, both algorithms benefit each other. On one hand, `XChaCha20Poly1305` encryption of `OTP`-encrypted messages, provides protection against `OTP` implementation errors, on the other hand, using `OTP`-encrypted messages as plaintext to `XChaCha20Poly1305` destroys one of cryptographors favorite oracles `known plaintext oracle`, which removes a whole class of attacks.
 
 Additionally, if the `OTP Batch` exchange was not intercepted nor logged, OTPs become unbreakable.
 
 
 **Question**
 
-Why do you generate random bytes of X size, then hash them with `SHA3_512` and truncate them back to X size ?
+Why do you generate random bytes of X size, then hash them with `SHA3_512` and truncate them back to X size?
 
 **Answer**
 
@@ -583,11 +583,11 @@ The reason we use SHA3_512 specifically, and truncate to size we need, is actual
 - Less code is called: Depending on one hashing algorithm, means we have to call less code with potentinally untrusted input. 
 - `SHA3_512` internal state can store more entropy than for instance `SHA3_256`.
 - `SHA3` in general, is proven to be better resistant to `Groover's` algorithm, which makes it better long-term than (for instance) `SHA2`.
-- 
+  
 
 **Question**
 
-Why do you use `Argon2id` instead of `Argon2i` or `Argon2d` ?
+Why do you use `Argon2id` instead of `Argon2i` or `Argon2d`?
 
 **Answer**
 
@@ -596,7 +596,7 @@ Because `Argon2id` combines both `Argon2i` and `Argon2d` providing more general 
 
 **Question**
 
-Why don't you use a NIST-approved algorithm instead of `Argon2id` ?
+Why don't you use a NIST-approved algorithm instead of `Argon2id`?
 
 **Answer**
 
@@ -605,7 +605,7 @@ Because just because an algorithm is not NIST-approved, does not mean it's insec
 
 **Question**
 
-Why reinvent the wheel ? Why not adopt something like Signal's protocol ?
+Why reinvent the wheel? Why not adopt something like Signal's protocol?
 
 **Answer**
 
@@ -615,7 +615,7 @@ But it does not fit our criteria nor objective with the `Strandlock` protocol. O
 
 **Question**
 
-Why is the protocol name "Strandlock" ?
+Why is the protocol name "Strandlock"?
 
 **Answer**
 
