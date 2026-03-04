@@ -1,6 +1,7 @@
 from pathlib import Path
 from base64 import b64encode, b64decode
 from core.constants import (
+        XCHACHA20POLY1305_NONCE_LEN,
         ML_KEM_1024_NAME,
         CLASSIC_MCELIECE_8_F_NAME,
         ACCOUNT_FILE_PATH,
@@ -29,13 +30,13 @@ def load_account_data(password = None) -> dict:
         with open(ACCOUNT_FILE_PATH, "rb") as f:
             blob = f.read()
 
-            # first 12 bytes is nonce, and last 32 bytes is the password salt, 
+            # first XCHACHA20POLY13055_NONCE_LEN bytes is nonce, and last 32 bytes is the password salt, 
             # and the ciphertext is inbetween.
             password_kdf, _ = crypto.derive_key_argon2id(password.encode(), salt=blob[-ARGON2_SALT_LEN:])
             
             blob = blob[:-ARGON2_SALT_LEN]
 
-            user_data = json.loads(crypto.decrypt_xchacha20poly1305(password_kdf, blob[:12], blob[12:]))
+            user_data = json.loads(crypto.decrypt_xchacha20poly1305(password_kdf[:32], blob[:XCHACHA20POLY1305_NONCE_LEN], blob[XCHACHA20POLY1305_NONCE_LEN:]))
 
     
     with open(Path("assets") / "browsers_headers.json", "r") as f:
@@ -258,7 +259,7 @@ def save_account_data(user_data: dict, user_data_lock, password = None) -> None:
         password_kdf, password_salt = crypto.derive_key_argon2id(password.encode())
 
 
-        nonce, ciphertext = crypto.encrypt_xchacha20poly1305(password_kdf, json.dumps(user_data).encode("utf-8"))
+        nonce, ciphertext = crypto.encrypt_xchacha20poly1305(password_kdf[:32], json.dumps(user_data).encode("utf-8"))
         with open(ACCOUNT_FILE_PATH, "wb") as f:
             f.write(nonce + ciphertext + password_salt)
 
