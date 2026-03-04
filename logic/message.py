@@ -217,7 +217,7 @@ def send_message_processor(user_data, user_data_lock, contact_id: str, message: 
         )
    
     try:
-        http_request(f"{server_url}/data/sendd", "POST", metadata = {
+        http_request(f"{server_url}/data/send", "POST", metadata = {
                 "recipient": contact_id
             }, 
             blob = ciphertext_blob, 
