@@ -4,7 +4,7 @@ core/crypto
 Post-quantum cryptographic operations for Coldwire.
 
 Implements:
-- Key generation (ML-KEM-1024,  ML-DSA-87, Classic-McEliece-8192128f)
+- Key generation (ML-KEM-1024,  ML-DSA-87, Classic-McEliece-8192128)
 - Signature creation and verification
 - One-Time Pad (OTP) encryption with padding
 - Retrieving shared secrets from KEM chunks

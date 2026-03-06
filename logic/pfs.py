@@ -21,15 +21,15 @@ from core.constants import (
     ML_DSA_87_NAME,
     ML_KEM_1024_PK_LEN,
     ML_DSA_87_SIGN_LEN,
-    XCHACHA20POLY1305_NONCE_LEN,
-    CLASSIC_MCELIECE_8_F_NAME,
-    CLASSIC_MCELIECE_8_F_PK_LEN,
-    CLASSIC_MCELIECE_8_F_ROTATE_AT,
+    CHACHA20POLY1305_NONCE_LEN,
+    CLASSIC_MCELIECE_8_NAME,
+    CLASSIC_MCELIECE_8_PK_LEN,
+    CLASSIC_MCELIECE_8_ROTATE_AT,
     KEYS_HASH_CHAIN_LEN
 )
 from core.trad_crypto import (
         sha3_512,
-        encrypt_xchacha20poly1305
+        encrypt_chacha20poly1305
 )
 from base64 import b64encode, b64decode
 import secrets
@@ -54,8 +54,8 @@ def send_pfs_ack(user_data: dict, user_data_lock: threading.Lock, contact_id: st
 
 
     new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
-    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
-    _, ciphertext_blob = encrypt_xchacha20poly1305(
+    new_strand_nonce = sha3_512(secrets.token_bytes(CHACHA20POLY1305_NONCE_LEN))[:CHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_chacha20poly1305(
             our_next_strand_key, 
             new_strand_key + new_strand_nonce + PFS_TYPES["PFS_ACK"],
             nonce = our_next_strand_nonce
@@ -112,8 +112,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     session_headers  = user_data_copied["tmp"]["session_headers"]
     
 
-    rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] 
-    rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]
+    rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"] 
+    rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotate_at"]
 
     lt_sign_private_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
     
@@ -134,9 +134,9 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     publickeys_hashchain = our_hash_chain + kyber_public_key
 
     rotate_mceliece = False
-    if (rotate_at == rotation_counter) or (user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] is None):
+    if (rotate_at == rotation_counter) or (user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] is None):
         # Generate Classic McEliece 8192128f keys
-        mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_F_NAME)
+        mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_NAME)
         publickeys_hashchain += mceliece_public_key
         rotate_mceliece = True
 
@@ -144,8 +144,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
     
     new_strand_key = sha3_512(secrets.token_bytes(32))[:32]
-    new_strand_nonce = sha3_512(secrets.token_bytes(XCHACHA20POLY1305_NONCE_LEN))[:XCHACHA20POLY1305_NONCE_LEN]
-    _, ciphertext_blob = encrypt_xchacha20poly1305(
+    new_strand_nonce = sha3_512(secrets.token_bytes(CHACHA20POLY1305_NONCE_LEN))[:CHACHA20POLY1305_NONCE_LEN]
+    _, ciphertext_blob = encrypt_chacha20poly1305(
             our_next_strand_key, 
             new_strand_key + new_strand_nonce + PFS_TYPES["PFS_NEW"] + publickeys_hashchain_signature + publickeys_hashchain,
             nonce = our_next_strand_nonce,
@@ -175,12 +175,12 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
 
         if rotate_mceliece:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = mceliece_private_key
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = mceliece_public_key
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] = mceliece_private_key
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"] = mceliece_public_key
 
 
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotation_counter"] = 0
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["rotate_at"]        = CLASSIC_MCELIECE_8_F_ROTATE_AT
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"] = 0
+            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotate_at"]        = CLASSIC_MCELIECE_8_ROTATE_AT
 
 
 
@@ -239,15 +239,15 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
             user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]
 
-            if user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]:
-                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
-                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]
+            if user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"]:
+                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"]
+                user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"] = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"]
 
             user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"] = None
             user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"]  = None
             
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"] = None
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["public_key"]  = None
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] = None
+            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"]  = None
 
         save_account_data(user_data, user_data_lock)
         return
@@ -262,7 +262,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     if (
         (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) 
         or 
-        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN
+        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_PK_LEN + KEYS_HASH_CHAIN_LEN
     ):
         logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
         return
@@ -297,12 +297,12 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
 
     contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN]
 
-    if len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + CLASSIC_MCELIECE_8_F_PK_LEN + KEYS_HASH_CHAIN_LEN:
+    if len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + CLASSIC_MCELIECE_8_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
 
         contact_mceliece_public_key = contact_publickeys_hashchain[ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:]
         with user_data_lock:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_F_NAME] = contact_mceliece_public_key
+            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_NAME] = contact_mceliece_public_key
 
     elif len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:
         logger.info("contact (%s) has rotated their Kyber keys", contact_id)
@@ -317,11 +317,11 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
         user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = contact_kyber_public_key
 
         our_kyber_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
-        our_mceliece_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
+        our_mceliece_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"]
 
 
         staged_kem_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"]
-        staged_code_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_F_NAME]["private_key"]
+        staged_code_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"]
 
     if (our_kyber_private_key is None or our_mceliece_private_key is None) and ((staged_kem_private_key is None) and (staged_code_private_key is None)):
         logger.info("We are sending the contact (%s) our ephemeral keys because we didnt do it before.", contact_id)

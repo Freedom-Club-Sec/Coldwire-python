@@ -13,13 +13,13 @@ from core.constants import (
     SMP_TYPES,
     PFS_TYPES,
     MSG_TYPES,
-    XCHACHA20POLY1305_NONCE_LEN
+    CHACHA20POLY1305_NONCE_LEN
 )
 from core.crypto import (
         random_number_range
 )
 from core.trad_crypto import (
-        decrypt_xchacha20poly1305
+        decrypt_chacha20poly1305
 )
 from base64 import b64decode, urlsafe_b64encode
 import copy
@@ -174,11 +174,11 @@ def background_worker(user_data, user_data_lock, ui_queue, stop_flag):
 
                 if contact_next_strand_key and contact_next_strand_nonce:
                     try:
-                        blob_plaintext = decrypt_xchacha20poly1305(contact_next_strand_key, contact_next_strand_nonce, blob)
+                        blob_plaintext = decrypt_chacha20poly1305(contact_next_strand_key, contact_next_strand_nonce, blob)
 
                         contact_next_strand_key   = blob_plaintext[:32]
-                        contact_next_strand_nonce = blob_plaintext[32:32 + XCHACHA20POLY1305_NONCE_LEN]
-                        blob_plaintext = blob_plaintext[32 + XCHACHA20POLY1305_NONCE_LEN:]
+                        contact_next_strand_nonce = blob_plaintext[32:32 + CHACHA20POLY1305_NONCE_LEN]
+                        blob_plaintext = blob_plaintext[32 + CHACHA20POLY1305_NONCE_LEN:]
 
                         with user_data_lock:
                             user_data["contacts"][sender]["contact_next_strand_key"]   = contact_next_strand_key

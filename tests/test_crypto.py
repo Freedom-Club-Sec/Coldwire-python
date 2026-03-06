@@ -30,10 +30,10 @@ from core.constants import (
     ML_DSA_87_PK_LEN,
     ML_DSA_87_SIGN_LEN,
 
-    CLASSIC_MCELIECE_8_F_NAME,
-    CLASSIC_MCELIECE_8_F_SK_LEN, 
-    CLASSIC_MCELIECE_8_F_PK_LEN,
-    CLASSIC_MCELIECE_8_F_CT_LEN 
+    CLASSIC_MCELIECE_8_NAME,
+    CLASSIC_MCELIECE_8_SK_LEN, 
+    CLASSIC_MCELIECE_8_PK_LEN,
+    CLASSIC_MCELIECE_8_CT_LEN 
 
 )
 
@@ -73,15 +73,15 @@ def test_mceliece_keygen_basic():
     seen_public_keys  = set()
 
     for _ in range(10):
-        private_key, public_key = generate_kem_keys(CLASSIC_MCELIECE_8_F_NAME)
+        private_key, public_key = generate_kem_keys(CLASSIC_MCELIECE_8_NAME)
 
         assert private_key not in seen_private_keys, "Duplicate private key detected"
         assert public_key not in seen_public_keys,  "Duplicate public key detected"
 
         assert private_key != public_key, "Private and public keys must differ"
         assert isinstance(private_key, bytes) and isinstance(public_key, bytes), "Keys must be bytes"
-        assert len(private_key) == CLASSIC_MCELIECE_8_F_SK_LEN, "Private key length mismatch with spec"
-        assert len(public_key)  == CLASSIC_MCELIECE_8_F_PK_LEN, "Public key length mismatch with spec"
+        assert len(private_key) == CLASSIC_MCELIECE_8_SK_LEN, "Private key length mismatch with spec"
+        assert len(public_key)  == CLASSIC_MCELIECE_8_PK_LEN, "Public key length mismatch with spec"
 
         seen_private_keys.add(private_key)
         seen_public_keys.add(public_key)

@@ -5,8 +5,8 @@ import math
 
 from core.constants import (
     ML_KEM_1024_NAME,
-    CLASSIC_MCELIECE_8_F_NAME,
-    CLASSIC_MCELIECE_8_F_ROTATE_AT
+    CLASSIC_MCELIECE_8_NAME,
+    CLASSIC_MCELIECE_8_ROTATE_AT
 )
 
 def generate_nickname_id(length: int = 4) -> str:
@@ -69,15 +69,15 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                 },
                 "ephemeral_keys": {
                     "contact_public_keys": {
-                        CLASSIC_MCELIECE_8_F_NAME: None,
+                        CLASSIC_MCELIECE_8_NAME: None,
                         ML_KEM_1024_NAME: None
                     },
                     "our_keys": {
-                        CLASSIC_MCELIECE_8_F_NAME: {
+                        CLASSIC_MCELIECE_8_NAME: {
                             "public_key": None,
                             "private_key": None,
                             "rotation_counter": 0,
-                            "rotate_at": CLASSIC_MCELIECE_8_F_ROTATE_AT,
+                            "rotate_at": CLASSIC_MCELIECE_8_ROTATE_AT,
                         },
                         ML_KEM_1024_NAME: {
                             "public_key": None,
@@ -85,7 +85,7 @@ def save_contact(user_data: dict, user_data_lock, contact_id: str) -> None:
                         },
                     },
                     "staged_keys": {
-                        CLASSIC_MCELIECE_8_F_NAME: {
+                        CLASSIC_MCELIECE_8_NAME: {
                             "public_key": None,
                             "private_key": None,
                         },
