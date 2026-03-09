@@ -2,7 +2,7 @@
     Handles Perfect Forward Secrecy (PFS) ephemeral keys exchange and rotation for contacts.
 
     Handles:
-    - Generates and rotates ephemeral (one-time use) ML-KEM-1024 keys and (medium-term) Classic McEliece keys.
+    - Generates and rotates ephemeral (one-time use) ML-KEM-1024 and Classic McEliece keys.
     - Uses per-contact hash chains to prevent replay attacks, and verifies authenticity using ML-DSA-87.
     - Sends and receives signed ephemeral keys using long-term signing keys.
     - Updates local account storage with new key material after successful exchange.
@@ -24,7 +24,6 @@ from core.constants import (
     CHACHA20POLY1305_NONCE_LEN,
     CLASSIC_MCELIECE_8_NAME,
     CLASSIC_MCELIECE_8_PK_LEN,
-    CLASSIC_MCELIECE_8_ROTATE_AT,
     KEYS_HASH_CHAIN_LEN
 )
 from core.trad_crypto import (
@@ -86,8 +85,7 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     Generate, encrypt, and send fresh ephemeral keys to a contact.
 
     - Maintains a per-contact hash chain for signing key material.
-    - Generates new Kyber1024 keys every call.
-    - Optionally rotates McEliece keys if rotation threshold is reached.
+    - Generates new Kyber1024 and McEliece keys every call.
     - Signs all key material with the long-term signing key.
     - Sends to the server using an authenticated HTTP request.
     - If successful, stores new keys in `user_data["tmp"]` for later update.
@@ -112,8 +110,6 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
     session_headers  = user_data_copied["tmp"]["session_headers"]
     
 
-    rotation_counter = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"] 
-    rotate_at        = user_data_copied["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotate_at"]
 
     lt_sign_private_key = user_data_copied["contacts"][contact_id]["lt_sign_keys"]["our_keys"]["private_key"]
     
@@ -131,14 +127,11 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
 
     # Generate new ML-KEM-1024 keys for us
     kyber_private_key, kyber_public_key = generate_kem_keys(ML_KEM_1024_NAME)
-    publickeys_hashchain = our_hash_chain + kyber_public_key
 
-    rotate_mceliece = False
-    if (rotate_at == rotation_counter) or (user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] is None):
-        # Generate Classic McEliece 8192128f keys
-        mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_NAME)
-        publickeys_hashchain += mceliece_public_key
-        rotate_mceliece = True
+    # Generate Classic McEliece 8192128 keys
+    mceliece_private_key, mceliece_public_key = generate_kem_keys(CLASSIC_MCELIECE_8_NAME)
+    
+    publickeys_hashchain = our_hash_chain + kyber_public_key + mceliece_public_key    
 
     # Sign them with our per-contact long-term private key
     publickeys_hashchain_signature = create_signature(ML_DSA_87_NAME, publickeys_hashchain, lt_sign_private_key)
@@ -174,13 +167,8 @@ def send_new_ephemeral_keys(user_data: dict, user_data_lock: threading.Lock, con
         user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["public_key"] = kyber_public_key
 
 
-        if rotate_mceliece:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] = mceliece_private_key
-            user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"] = mceliece_public_key
-
-
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"] = 0
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotate_at"]        = CLASSIC_MCELIECE_8_ROTATE_AT
+        user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"] = mceliece_private_key
+        user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["public_key"] = mceliece_public_key
 
 
 
@@ -260,9 +248,7 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
 
 
     if (
-        (len(pfs_plaintext) < ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + KEYS_HASH_CHAIN_LEN) 
-        or 
-        len(pfs_plaintext) > ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_PK_LEN + KEYS_HASH_CHAIN_LEN
+        len(pfs_plaintext) != ML_KEM_1024_PK_LEN + ML_DSA_87_SIGN_LEN + CLASSIC_MCELIECE_8_PK_LEN + KEYS_HASH_CHAIN_LEN
     ):
         logger.error("Contact (%s) gave us a PFS request with malformed strand plaintext length (%d)", contact_id, len(pfs_plaintext))
         return
@@ -295,17 +281,12 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
             logger.error("Contact keys hash chain does not match our computed hash chain! Skipping this PFS message...")
             return
 
+    
+    logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
+
     contact_kyber_public_key = contact_publickeys_hashchain[KEYS_HASH_CHAIN_LEN: ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN]
 
-    if len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + CLASSIC_MCELIECE_8_PK_LEN + KEYS_HASH_CHAIN_LEN:
-        logger.info("contact (%s) has rotated their Kyber and McEliece keys", contact_id)
-
-        contact_mceliece_public_key = contact_publickeys_hashchain[ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:]
-        with user_data_lock:
-            user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_NAME] = contact_mceliece_public_key
-
-    elif len(contact_publickeys_hashchain) == ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:
-        logger.info("contact (%s) has rotated their Kyber keys", contact_id)
+    contact_mceliece_public_key = contact_publickeys_hashchain[ML_KEM_1024_PK_LEN + KEYS_HASH_CHAIN_LEN:]
 
 
     logger.info("We are acknowledging contact's new PFS keys")
@@ -315,7 +296,8 @@ def pfs_data_handler(user_data: dict, user_data_lock: threading.Lock, user_data_
     with user_data_lock:
         user_data["contacts"][contact_id]["lt_sign_keys"]["contact_hash_chain"] = contact_hash_chain
         user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][ML_KEM_1024_NAME] = contact_kyber_public_key
-
+        user_data["contacts"][contact_id]["ephemeral_keys"]["contact_public_keys"][CLASSIC_MCELIECE_8_NAME] = contact_mceliece_public_key
+        
         our_kyber_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][ML_KEM_1024_NAME]["private_key"]
         our_mceliece_private_key = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"]
 

@@ -143,7 +143,7 @@ def decrypt_xchacha20poly1305(key: bytes, nonce: bytes, ciphertext: bytes) -> by
 
 
 
-def encrypt_chacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, max_padding: int = XCHACHA20POLY1305_MAX_RANODM_PAD) -> tuple[bytes, bytes]:
+def encrypt_chacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, max_padding: int = CHACHA20POLY1305_MAX_RANODM_PAD) -> tuple[bytes, bytes]:
     """
     Encrypt plaintext using ChaCha20Poly1305.
 
@@ -153,7 +153,7 @@ def encrypt_chacha20poly1305(key: bytes, plaintext: bytes, nonce: bytes = None, 
         key: A 32-byte ChaCha20Poly1305 key.
         plaintext: Data to encrypt.
         nonce: An (optional) nonce to be used.
-        max_padding: an (optional) maximum padding limit number to message. Cannot be larger than what `XCHACHA20POLY1305_MAX_RANODM_PAD` could store. Set to 0 for no padding.
+        max_padding: an (optional) maximum padding limit number to message. Cannot be larger than what `CHACHA20POLY1305_MAX_RANODM_PAD` could store. Set to 0 for no padding.
     Returns:
         A tuple (nonce, ciphertext) where:
         - nonce: The randomly generated nonce or the same given nonce.

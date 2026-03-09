@@ -319,21 +319,18 @@ def messages_data_handler(user_data: dict, user_data_lock, user_data_copied: dic
 
             user_data["contacts"][contact_id]["contact_next_strand_key"] = contact_next_strand_key
 
-            user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"] += 1
-            
             staged_kyber_private_key = bool(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][ML_KEM_1024_NAME]["private_key"])
+            staged_mceliece_private_key = bool(user_data["contacts"][contact_id]["ephemeral_keys"]["staged_keys"][CLASSIC_MCELIECE_8_NAME]["private_key"])
 
-            rotation_counter = user_data["contacts"][contact_id]["ephemeral_keys"]["our_keys"][CLASSIC_MCELIECE_8_NAME]["rotation_counter"]
 
 
-        logger.debug("Incremented McEliece's rotation_counter by 1 (now is %d) for contact (%s)", rotation_counter, contact_id)
 
         logger.info("Saved contact (%s) new batch of One-Time-Pads, new strand key, and new hash chain seed", contact_id)
         save_account_data(user_data, user_data_lock)
 
         # Why ???????
         # Nvm, I know why, PFS.
-        if not staged_kyber_private_key:
+        if (not staged_kyber_private_key) and (not staged_mceliece_private_key):
             logger.info("Rotating our ephemeral keys") 
             send_new_ephemeral_keys(user_data, user_data_lock, contact_id, ui_queue)
             save_account_data(user_data, user_data_lock)
