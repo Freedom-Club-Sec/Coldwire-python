@@ -6,49 +6,7 @@
 
 ---
 
-**Coldwire** is designed to survive *the worst attacks* and when operated correctly it offers significantly better security than any messenger currently available.
 
-## 🔒 Security Model & Features
-- **Security**: Essentially unbreakable composite encryption scheme.
-- **Perfect-Forward-Secrecy**: Keys are rotated after use.
-- **Plausible Deniability**: messages are not cryptographically tied to you
-- **Mandatory SMP**: We *enforce* [Socialist millionaire problem](https://en.wikipedia.org/wiki/Socialist_millionaire_problem) before any chat to prevent **MiTM attacks**.  
-- **Minimal Attack Surface**:  
-  - Tkinter UI only, no embedded browsers nor HTML
-  - Minimal Python dependecies
-  - All untrusted inputs truncated to safe lengths to prevent buffer‑overflow in liboqs or Tk  
-- **Traffic obfuscation**: Network adversaries (ISP, etc) cannot easily censorship nor detect Coldwire usage, because we have built-in protocol obfsucation support.
-- **Metadata‑Free**: Random 16‑digit session IDs, no server contacts, no logs, no server‑side metadata, enforced passwordless authentication.
+### Archived, no longer recommended for use
 
-## ⚠️ Disclaimer
-While Coldwire enforces paranoid‑level security features, the [protocol](https://github.com/Freedom-Club-Sec/Coldwire/blob/main/PROTOCOL.md), and codebase are under active development.
-
-**Do not** use for production‑grade secrecy until an formal audit is complete.
-
-## Installation
-### Dependecies
-- liboqs-python
-- git
-- CMake
-- C compiler
-- Python 3
-  
-Install [liboqs-python](https://github.com/open-quantum-safe/liboqs-python/) by running:
-```sh
-git clone --depth=1 https://github.com/open-quantum-safe/liboqs-python
-cd liboqs-python
-pip install .
-```
-
-Clone Coldwire repository and install `requirements.txt` by running:
-```
-git clone https://github.com/Freedom-Club-Sec/Coldwire
-cd Coldwire
-pip install -r requirements.txt
-```
-
-## Usage
-Run Coldwire's GUI using:
-```sh
-python3 main.py
-```
+Use [Coldwire Desktop](https://github.com/Freedom-Club-Sec/Coldwire-Desktop) instead: https://github.com/Freedom-Club-Sec/Coldwire-Desktop
